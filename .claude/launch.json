@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "chatanalytics-demo",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "server/index.ts"],
+      "env": { "PORT": "3100", "DATABASE_PATH": "data/demo.db" },
+      "port": 3100
+    }
+  ]
+}

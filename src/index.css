@@ -1,0 +1,257 @@
+@import 'tailwindcss';
+
+/* ---------- Tokens (claro / escuro) ---------- */
+:root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-2: #fbfbfd;
+  --elevated: #ffffff;
+  --label: #1d1d1f;
+  --label-2: #6e6e73;
+  --label-3: #86868b;
+  --separator: rgba(0, 0, 0, 0.08);
+  --fill: rgba(120, 120, 128, 0.12);
+  --fill-2: rgba(120, 120, 128, 0.08);
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-soft: rgba(0, 113, 227, 0.1);
+  --green: #248a3d;
+  --green-fill: #34c759;
+  --green-soft: rgba(52, 199, 89, 0.14);
+  --red: #d70015;
+  --red-fill: #ff3b30;
+  --red-soft: rgba(255, 59, 48, 0.12);
+  --orange: #c93400;
+  --orange-fill: #ff9500;
+  --orange-soft: rgba(255, 149, 0, 0.14);
+  --indigo: #3634a3;
+  --indigo-fill: #5856d6;
+  --indigo-soft: rgba(88, 86, 214, 0.12);
+  --teal: #0071a4;
+  --teal-fill: #30b0c7;
+  --sidebar: rgba(246, 246, 248, 0.72);
+  --toggle-off: #e5e5ea;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+  color-scheme: light;
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #232325;
+    --elevated: #2c2c2e;
+    --label: #f5f5f7;
+    --label-2: #a1a1a6;
+    --label-3: #7c7c80;
+    --separator: rgba(255, 255, 255, 0.1);
+    --fill: rgba(120, 120, 128, 0.28);
+    --fill-2: rgba(120, 120, 128, 0.18);
+    --accent: #0a84ff;
+    --accent-hover: #409cff;
+    --accent-soft: rgba(10, 132, 255, 0.18);
+    --green: #30d158;
+    --green-fill: #30d158;
+    --green-soft: rgba(48, 209, 88, 0.18);
+    --red: #ff453a;
+    --red-fill: #ff453a;
+    --red-soft: rgba(255, 69, 58, 0.18);
+    --orange: #ff9f0a;
+    --orange-fill: #ff9f0a;
+    --orange-soft: rgba(255, 159, 10, 0.18);
+    --indigo: #7d7aff;
+    --indigo-fill: #5e5ce6;
+    --indigo-soft: rgba(94, 92, 230, 0.22);
+    --teal: #40c8e0;
+    --teal-fill: #40c8e0;
+    --sidebar: rgba(28, 28, 30, 0.72);
+    --toggle-off: #39393d;
+    --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', 'Inter', system-ui,
+    sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-elevated: var(--elevated);
+  --color-label: var(--label);
+  --color-label-2: var(--label-2);
+  --color-label-3: var(--label-3);
+  --color-separator: var(--separator);
+  --color-fill: var(--fill);
+  --color-fill-2: var(--fill-2);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-green: var(--green);
+  --color-green-fill: var(--green-fill);
+  --color-green-soft: var(--green-soft);
+  --color-red: var(--red);
+  --color-red-fill: var(--red-fill);
+  --color-red-soft: var(--red-soft);
+  --color-orange: var(--orange);
+  --color-orange-fill: var(--orange-fill);
+  --color-orange-soft: var(--orange-soft);
+  --color-indigo: var(--indigo);
+  --color-indigo-fill: var(--indigo-fill);
+  --color-indigo-soft: var(--indigo-soft);
+  --color-teal: var(--teal);
+  --color-teal-fill: var(--teal-fill);
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+  --radius-card: 20px;
+}
+
+/* ---------- Base ---------- */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--label);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: var(--accent-soft);
+}
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+.display {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'Inter', system-ui, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* Barras de rolagem discretas */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill) transparent;
+}
+
+/* Animações suaves, respeitando "reduzir movimento" */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.animate-sheet {
+  animation: sheet-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.animate-pop {
+  animation: pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--fill-2) 25%, var(--fill) 50%, var(--fill-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- Impressão / PDF ---------- */
+.print-only {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  body {
+    background: #fff;
+    font-size: 12px;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  main > div {
+    animation: none !important;
+    max-width: none !important;
+  }
+  .report section {
+    box-shadow: none;
+    border: 1px solid #e5e5ea;
+    break-inside: avoid;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
