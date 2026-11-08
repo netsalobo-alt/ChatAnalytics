@@ -1,4 +1,4 @@
-# Instalar o ChatAnalytics no Portainer
+# Instalar o ChatAnalytics no Portainer (analytics.m2auto.com.br)
 
 O sistema roda num único container com banco SQLite. Os dados ficam no volume `chatanalytics_data`.
 
@@ -7,7 +7,8 @@ A imagem é montada automaticamente pelo GitHub a cada atualização do `main`, 
 
 ## 1. Antes de começar (uma vez só)
 
-1. **Acesso à imagem.** O repositório é privado, então a imagem também é. Cadastre o GitHub como registro no Portainer:
+1. **DNS.** `analytics.m2auto.com.br` já aponta para o servidor (135.181.88.165). Nada a fazer.
+2. **Acesso à imagem.** O repositório é privado, então a imagem também é. Cadastre o GitHub como registro no Portainer:
    - no GitHub, crie um token em **Settings › Developer settings › Personal access tokens › Tokens (classic)**,
      só com a permissão `read:packages`;
    - no Portainer, abra **Registries › Add registry › Custom registry**:
@@ -17,8 +18,16 @@ A imagem é montada automaticamente pelo GitHub a cada atualização do `main`, 
 
    Também é possível deixar o pacote público (https://github.com/netsalobo-alt?tab=packages › **chatanalytics** ›
    **Package settings › Change visibility**). Isso expõe o código da aplicação, mas não os dados.
-2. **Um domínio** apontando para o servidor, por exemplo `analytics.nortetelecom.net.br`. O HTTPS é necessário
-   para o login (cookie seguro) e para o webhook do Chatwoot.
+3. **Dados do Traefik.** O servidor já tem um Traefik nas portas 80/443 (é ele que serve o `m2auto.com.br`), na rede
+   **`Mosqueironet`**. O compose já vem com esta rede, o entrypoint `websecure` e o certresolver `letsencryptresolver`.
+   Só mude algo se o seu Traefik usar outros nomes. Para conferir, veja a stack do M2 ou a do Traefik:
+   - **Portainer › Stacks › m2-veiculos › Editor**, procure as linhas `traefik.`:
+     - `...entrypoints=` → valor de `TRAEFIK_ENTRYPOINT` (ex.: `websecure`);
+     - `...tls.certresolver=` → valor de `TRAEFIK_CERTRESOLVER` (padrão `letsencryptresolver`);
+     - na seção `networks:` do fim do arquivo, o `name:` da rede externa → valor de `TRAEFIK_NETWORK`.
+   - Se a stack do M2 não tiver essas linhas, veja em **Containers › (container do traefik) › Inspect**:
+     a rede aparece em *Networks* e os nomes do entrypoint e do certresolver nos argumentos (`--entrypoints.NOME.address=:443`,
+     `--certificatesresolvers.NOME.acme...`).
 
 ## 2. Criar a stack
 
@@ -32,41 +41,29 @@ A imagem é montada automaticamente pelo GitHub a cada atualização do `main`, 
    | --- | --- | --- |
    | `ADMIN_EMAIL` | e-mail do administrador | sim |
    | `ADMIN_PASSWORD` | senha forte, mínimo 8 caracteres | sim |
+   | `TRAEFIK_NETWORK` | rede do Traefik (padrão `Mosqueironet`) | se for diferente |
+   | `TRAEFIK_ENTRYPOINT` | entrypoint HTTPS (padrão `websecure`) | se for diferente |
+   | `TRAEFIK_CERTRESOLVER` | certresolver (padrão `letsencryptresolver`) | se for diferente |
+   | `DOMINIO` | padrão `analytics.m2auto.com.br` | não |
    | `ADMIN_NAME` | nome exibido (padrão `Administrador`) | não |
-   | `PORTA` | porta no servidor (padrão `3001`; a `3000` já é do M2 Seminovos) | não |
 
    O administrador é criado **só na primeira vez**, com o banco vazio. Depois, a senha é trocada pelo próprio sistema
    e as variáveis deixam de ter efeito.
 5. Clique em **Deploy the stack**.
-6. Em **Containers**, o `chatanalytics` deve ficar **healthy** em até 1 minuto. Teste em `http://IP-DO-SERVIDOR:3001`.
+6. Em **Containers**, o `chatanalytics` deve ficar **healthy** em até 1 minuto. Abra https://analytics.m2auto.com.br:
+   na primeira visita o Traefik emite o certificado, o que leva alguns segundos.
 
-## 3. HTTPS (obrigatório em produção)
+## 3. Como o HTTPS funciona
 
-**Nginx Proxy Manager:**
-- **Proxy Hosts › Add Proxy Host**:
-  - Domain: `analytics.nortetelecom.net.br`
-  - Scheme: `http`
-  - Forward Hostname/IP: o IP do servidor (ou `chatanalytics`, se estiverem na mesma rede Docker)
-  - Forward Port: `3001` (ou `3000` se usar o nome do container na mesma rede)
-  - marque **Block Common Exploits**
-- Aba **SSL**: **Request a new SSL Certificate**, marque **Force SSL** e **HTTP/2**.
-- Aba **Advanced**, para importar backups grandes:
-  ```
-  client_max_body_size 200m;
-  ```
+Não há portas publicadas: o Traefik recebe o acesso em 443, emite o certificado Let's Encrypt para o domínio e encaminha
+para a porta 3000 do container pela rede `TRAEFIK_NETWORK`. O redirecionamento de HTTP para HTTPS já é feito pelo
+Traefik do servidor.
 
-**Traefik:** adicione estas labels ao serviço (troque o domínio e o certresolver) e remova a seção `ports`:
-```yaml
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.chatanalytics.rule=Host(`analytics.nortetelecom.net.br`)
-      - traefik.http.routers.chatanalytics.entrypoints=websecure
-      - traefik.http.routers.chatanalytics.tls.certresolver=letsencrypt
-      - traefik.http.services.chatanalytics.loadbalancer.server.port=3000
-```
+O sistema confia no proxy (`trust proxy`): marca o cookie como `Secure` e monta a URL do webhook com
+`https://analytics.m2auto.com.br` automaticamente.
 
-O sistema confia no proxy (`trust proxy`): marca o cookie como `Secure` e monta a URL do webhook com `https`
-automaticamente.
+O compose traz as labels nos dois formatos (container e `deploy.labels`), então funciona com o Traefik em Docker
+comum ou em Docker Swarm.
 
 ## 4. Primeiro acesso
 
@@ -110,8 +107,9 @@ docker run --rm -v chatanalytics_data:/data -v "$PWD":/backup alpine \
 | --- | --- | --- |
 | Deploy falha com "Defina ADMIN_EMAIL/ADMIN_PASSWORD" | variável não preenchida | adicione em Environment variables |
 | `unauthorized` ou `denied` ao baixar a imagem | registro GHCR não cadastrado, ou imagem ainda não publicada | item 1; confira se o workflow está verde |
-| Porta já em uso | a 3000 é do M2 | mantenha `PORTA=3001` ou outra livre |
-| Login não fica salvo | acesso por `http` atrás de proxy sem `X-Forwarded-Proto` | acesse pelo `https` do proxy |
-| URL do webhook aparece com `http://` | proxy não envia `X-Forwarded-Proto` | no NPM já vem configurado; no Nginx manual, adicione `proxy_set_header X-Forwarded-Proto $scheme;` |
-| Importação de backup falha por tamanho | limite do proxy | `client_max_body_size 200m;` |
+| Deploy falha com "network ... not found" | `TRAEFIK_NETWORK` com nome errado | confira o nome exato da rede (item 1.3) |
+| Site responde `404 page not found` | Traefik não está vendo o container | rede ou entrypoint errados; confira `TRAEFIK_NETWORK` e `TRAEFIK_ENTRYPOINT` |
+| `Gateway Timeout` / `Bad Gateway` | container em outra rede | a rede da stack precisa ser a mesma do Traefik |
+| Navegador acusa "TRAEFIK DEFAULT CERT" | certresolver com nome errado | ajuste `TRAEFIK_CERTRESOLVER` e faça redeploy |
+| Login não fica salvo | acesso por `http` | use sempre https://analytics.m2auto.com.br |
 | Container reinicia com `EACCES` | pasta do host com outro dono | use o volume nomeado do compose, ou `chown -R 1000:1000` na pasta |

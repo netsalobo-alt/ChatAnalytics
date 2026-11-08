@@ -29,6 +29,13 @@ jobs:
           npm run typecheck
           npm test
 
+      - name: Validar stack do Portainer
+        run: |
+          ADMIN_EMAIL=ci@teste.local ADMIN_PASSWORD=senha-ci-123 docker compose config > stack.yml
+          grep -q 'Host(`analytics.m2auto.com.br`)' stack.yml
+          grep -q 'name: Mosqueironet' stack.yml
+          cat stack.yml
+
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
