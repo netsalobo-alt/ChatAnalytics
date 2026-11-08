@@ -1,24 +1,18 @@
-# Stack do Portainer – ChatAnalytics em https://analytics.m2auto.com.br
+# Stack do Portainer (Docker Swarm) – ChatAnalytics em https://analytics.m2auto.com.br
 # Passo a passo em docs/PORTAINER.md
 #
-# Usa o Traefik que JÁ roda no servidor (o mesmo do m2auto.com.br). Não publica portas:
-# o acesso é só pelo domínio, com certificado Let's Encrypt emitido pelo Traefik.
+# Usa o Traefik do servidor (o mesmo do m2auto.com.br), com as mesmas configurações da stack do M2:
+# rede Mosqueironet, entrypoint websecure, certresolver letsencryptresolver. Não publica portas.
 #
 # Variáveis (Portainer → Stacks → "Environment variables"):
-#   ADMIN_EMAIL          (obrigatória) e-mail do administrador criado na PRIMEIRA execução
-#   ADMIN_PASSWORD       (obrigatória) senha desse administrador (mínimo 8 caracteres)
-#   ADMIN_NAME           (opcional) nome exibido; padrão "Administrador"
-#   DOMINIO              (opcional) padrão analytics.m2auto.com.br
-#   TRAEFIK_NETWORK      (opcional) rede Docker externa do Traefik; padrão Mosqueironet
-#   TRAEFIK_ENTRYPOINT   (opcional) entrypoint HTTPS do Traefik; padrão websecure
-#   TRAEFIK_CERTRESOLVER (opcional) certresolver do Let's Encrypt; padrão letsencryptresolver
+#   ADMIN_EMAIL     (obrigatória) e-mail do administrador criado na PRIMEIRA execução
+#   ADMIN_PASSWORD  (obrigatória) senha desse administrador (mínimo 8 caracteres)
+#   ADMIN_NAME      (opcional)    nome exibido; padrão "Administrador"
 #
 # O administrador só é criado com o banco vazio. Depois, a senha é trocada pelo próprio sistema.
 services:
   chatanalytics:
     image: ghcr.io/netsalobo-alt/chatanalytics:latest
-    container_name: chatanalytics # ignorado em Swarm
-    restart: unless-stopped # em Swarm vale o restart_policy abaixo
     environment:
       TZ: America/Belem
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Defina ADMIN_EMAIL nas variaveis da stack}
@@ -26,25 +20,22 @@ services:
       ADMIN_NAME: ${ADMIN_NAME:-Administrador}
     volumes:
       # banco SQLite (chatanalytics.db). NÃO apague este volume: é onde ficam todos os dados.
-      - cadata:/app/data
+      - chatanalytics_data:/app/data
     networks:
-      - traefik
-    labels: &traefik-labels
-      traefik.enable: "true"
-      traefik.docker.network: ${TRAEFIK_NETWORK:-Mosqueironet}
-      traefik.swarm.network: ${TRAEFIK_NETWORK:-Mosqueironet} # Traefik v3 em Swarm
-      traefik.http.routers.chatanalytics.rule: Host(`${DOMINIO:-analytics.m2auto.com.br}`)
-      traefik.http.routers.chatanalytics.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
-      traefik.http.routers.chatanalytics.tls: "true"
-      traefik.http.routers.chatanalytics.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencryptresolver}
-      traefik.http.routers.chatanalytics.service: chatanalytics
-      traefik.http.services.chatanalytics.loadbalancer.server.port: "3000"
-    # Em Docker Swarm o Traefik lê as labels do serviço (deploy.labels); fora do Swarm, este bloco é ignorado.
+      - Mosqueironet
     deploy:
       replicas: 1
       restart_policy:
         condition: any
-      labels: *traefik-labels
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.chatanalytics.rule=Host(`analytics.m2auto.com.br`)
+        - traefik.http.routers.chatanalytics.entrypoints=websecure
+        - traefik.http.routers.chatanalytics.tls=true
+        - traefik.http.routers.chatanalytics.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.chatanalytics.service=chatanalytics
+        - traefik.http.services.chatanalytics.loadbalancer.server.port=3000
+        - traefik.swarm.network=Mosqueironet
     logging:
       driver: json-file
       options:
@@ -52,10 +43,9 @@ services:
         max-file: "3"
 
 networks:
-  traefik:
+  Mosqueironet:
     external: true
-    name: ${TRAEFIK_NETWORK:-Mosqueironet}
 
 volumes:
-  cadata:
+  chatanalytics_data:
     name: chatanalytics_data

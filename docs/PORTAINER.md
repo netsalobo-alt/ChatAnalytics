@@ -53,7 +53,7 @@ A imagem é montada automaticamente pelo GitHub a cada atualização do `main`, 
 ## 3. Como o HTTPS funciona
 
 Não há portas publicadas: o Traefik recebe o acesso em 443, emite o certificado Let's Encrypt para o domínio e encaminha
-para a porta 3000 do container pela rede `TRAEFIK_NETWORK`. O redirecionamento de HTTP para HTTPS já é feito pelo
+para a porta 3000 do container pela rede `Mosqueironet`. O redirecionamento de HTTP para HTTPS já é feito pelo
 Traefik do servidor.
 
 O sistema confia no proxy (`trust proxy`): marca o cookie como `Secure` e monta a URL do webhook com
