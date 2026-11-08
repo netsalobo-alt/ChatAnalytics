@@ -17,8 +17,8 @@
 services:
   chatanalytics:
     image: ghcr.io/netsalobo-alt/chatanalytics:latest
-    container_name: chatanalytics
-    restart: unless-stopped
+    container_name: chatanalytics # ignorado em Swarm
+    restart: unless-stopped # em Swarm vale o restart_policy abaixo
     environment:
       TZ: America/Belem
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Defina ADMIN_EMAIL nas variaveis da stack}
@@ -32,6 +32,7 @@ services:
     labels: &traefik-labels
       traefik.enable: "true"
       traefik.docker.network: ${TRAEFIK_NETWORK:-Mosqueironet}
+      traefik.swarm.network: ${TRAEFIK_NETWORK:-Mosqueironet} # Traefik v3 em Swarm
       traefik.http.routers.chatanalytics.rule: Host(`${DOMINIO:-analytics.m2auto.com.br}`)
       traefik.http.routers.chatanalytics.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
       traefik.http.routers.chatanalytics.tls: "true"
@@ -40,6 +41,9 @@ services:
       traefik.http.services.chatanalytics.loadbalancer.server.port: "3000"
     # Em Docker Swarm o Traefik lê as labels do serviço (deploy.labels); fora do Swarm, este bloco é ignorado.
     deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
       labels: *traefik-labels
     logging:
       driver: json-file
