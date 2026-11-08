@@ -3,12 +3,20 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { sessionMiddleware } from './auth.ts';
+import { createFirstAdmin, passwordProblem, sessionMiddleware, userCount } from './auth.ts';
 import { api } from './routes.ts';
 import { rescheduleAutoSync, startHousekeeping } from './scheduler.ts';
 
 const PORT = Number(process.env.PORT) || 3000;
 const PROD = process.env.NODE_ENV === 'production';
+
+// Administrador inicial via variáveis de ambiente (produção): fecha a tela de primeiro acesso.
+if (userCount() === 0 && process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+  const problem = passwordProblem(process.env.ADMIN_PASSWORD);
+  if (problem) throw new Error(`ADMIN_PASSWORD inválida: ${problem}`);
+  createFirstAdmin({ name: process.env.ADMIN_NAME || 'Administrador', email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD });
+  console.log(`Administrador inicial criado: ${process.env.ADMIN_EMAIL}`);
+}
 
 const app = express();
 app.disable('x-powered-by');

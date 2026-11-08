@@ -1,0 +1,82 @@
+# Testa e monta a imagem Docker a cada atualização.
+# - Sempre: roda typecheck e testes, monta a imagem e testa o container (saúde, primeiro acesso e login).
+# - Push no main: publica em ghcr.io/netsalobo-alt/chatanalytics (tags latest e sha-xxxxxxx).
+name: Imagem Docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Typecheck e testes
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Montar imagem de teste
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: chatanalytics-teste
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Testar o container
+        run: |
+          docker run -d --name ca -p 3000:3000 -e ADMIN_EMAIL=ci@teste.local -e ADMIN_PASSWORD=senha-ci-123 chatanalytics-teste
+          for i in $(seq 1 30); do curl -fs http://localhost:3000/healthz && break; sleep 1; done
+          curl -fs http://localhost:3000/ | grep -q '<title>ChatAnalytics</title>'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/leads)" = "401"
+          curl -fs http://localhost:3000/api/auth/me | grep -q '"needs_setup":false'
+          curl -fs -c cj.txt -H 'content-type: application/json' \
+            -d '{"email":"ci@teste.local","password":"senha-ci-123"}' http://localhost:3000/api/auth/login
+          curl -fs -b cj.txt 'http://localhost:3000/api/analytics?period=today' > /dev/null
+          docker exec ca ls -la /app/data
+          docker logs ca
+
+      - name: Login no GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/chatanalytics
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+      - name: Publicar (amd64 e arm64)
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

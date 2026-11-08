@@ -22,12 +22,12 @@ PORT=3100 DATABASE_PATH=data/demo.db npm run dev   # demo@chatanalytics.local / 
 
 ## Produção (Docker / Portainer)
 
-```bash
-docker build -t chatanalytics .
-docker run -d -p 3000:3000 -v chatanalytics_data:/app/data -e COOKIE_SECURE=true chatanalytics
-```
+A cada push no `main`, o GitHub Actions roda os testes, testa o container e publica
+`ghcr.io/netsalobo-alt/chatanalytics:latest`. A stack do Portainer está em [`docker-compose.yml`](docker-compose.yml)
+e o passo a passo completo em [docs/PORTAINER.md](docs/PORTAINER.md).
 
-Use `COOKIE_SECURE=true` atrás de HTTPS. O banco SQLite fica no volume `/app/data`.
+Variáveis obrigatórias na stack: `ADMIN_EMAIL` e `ADMIN_PASSWORD` (criam o administrador na primeira execução).
+O banco SQLite fica no volume `chatanalytics_data`.
 
 ## Chatwoot
 

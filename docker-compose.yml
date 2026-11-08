@@ -1,0 +1,34 @@
+# Stack do Portainer – ChatAnalytics
+# Passo a passo em docs/PORTAINER.md
+#
+# Variáveis (Portainer → Stacks → "Environment variables"):
+#   ADMIN_EMAIL     (obrigatória) e-mail do administrador criado na PRIMEIRA execução
+#   ADMIN_PASSWORD  (obrigatória) senha desse administrador (mínimo 8 caracteres)
+#   ADMIN_NAME      (opcional)    nome exibido; padrão "Administrador"
+#   PORTA           (opcional)    porta do servidor; padrão 3001 (a 3000 já é do M2 Seminovos)
+#
+# O administrador só é criado com o banco vazio. Depois, a senha é trocada pelo próprio sistema.
+services:
+  chatanalytics:
+    image: ghcr.io/netsalobo-alt/chatanalytics:latest
+    container_name: chatanalytics
+    restart: unless-stopped
+    ports:
+      - "${PORTA:-3001}:3000"
+    environment:
+      TZ: America/Belem
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Defina ADMIN_EMAIL nas variaveis da stack}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD nas variaveis da stack}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+    volumes:
+      # banco SQLite (chatanalytics.db). NÃO apague este volume: é onde ficam todos os dados.
+      - cadata:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  cadata:
+    name: chatanalytics_data
