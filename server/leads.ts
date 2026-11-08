@@ -359,6 +359,8 @@ export interface LeadQuery {
   channel?: Channel;
   vendeu?: boolean;
   conflict?: boolean;
+  /** 'com' = CPF válido capturado; 'sem' = sem CPF válido. */
+  cpf?: 'com' | 'sem';
   search?: string;
   page?: number;
   page_size?: number;
@@ -380,6 +382,8 @@ function buildWhere(q: LeadQuery): { sql: string; params: (string | number)[] } 
   if (q.channel) (where.push('channel = ?'), params.push(q.channel));
   if (q.vendeu !== undefined) (where.push('vendeu = ?'), params.push(q.vendeu ? 1 : 0));
   if (q.conflict) where.push('cpf_conflict IS NOT NULL');
+  if (q.cpf === 'com') where.push('cpf IS NOT NULL AND cpf_valid = 1');
+  if (q.cpf === 'sem') where.push('(cpf IS NULL OR cpf_valid = 0)');
   if (q.search?.trim()) {
     const s = q.search.trim();
     const digits = s.replace(/\D/g, '');

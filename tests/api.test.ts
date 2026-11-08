@@ -103,6 +103,17 @@ test('edição manual protege o campo contra o webhook', async () => {
   assert.equal(lead.field_origins.cpf, 'MANUAL');
 });
 
+test('filtro de CPF separa leads com e sem CPF', async () => {
+  const extra = (await call('POST', '/leads', { contact_name: 'Sem Documento', contact_phone: '+5591900001111' })).data;
+  const com = (await call('GET', '/leads?cpf=com')).data;
+  const sem = (await call('GET', '/leads?cpf=sem')).data;
+  assert.ok(com.items.length >= 1 && com.items.every((l: any) => l.cpf && l.cpf_valid));
+  assert.ok(sem.items.some((l: any) => l.contact_name === 'Sem Documento'));
+  assert.ok(sem.items.every((l: any) => !l.cpf || !l.cpf_valid));
+  assert.equal(com.total + sem.total, (await call('GET', '/leads')).data.total);
+  await call('DELETE', `/leads/${extra.id}`);
+});
+
 test('operador não acessa usuários nem investimentos', async () => {
   await call('POST', '/users', { name: 'Op', email: 'op@teste.com', password: 'senha-op-123', role: 'operator' });
   const login = await call('POST', '/auth/login', { email: 'op@teste.com', password: 'senha-op-123' }, '');

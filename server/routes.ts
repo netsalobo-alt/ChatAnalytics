@@ -158,6 +158,7 @@ function parseLeadQuery(q: Record<string, unknown>): LeadQuery {
     status: LEAD_STATUSES.includes(q.status as LeadStatus) ? (q.status as LeadStatus) : undefined,
     vendeu: q.vendeu === 'sim' ? true : q.vendeu === 'nao' ? false : undefined,
     conflict: q.conflict === '1',
+    cpf: q.cpf === 'com' || q.cpf === 'sem' ? q.cpf : undefined,
     search: str(q.search),
     page: num(q.page),
     page_size: num(q.page_size),

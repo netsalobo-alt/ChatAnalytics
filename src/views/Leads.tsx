@@ -18,13 +18,14 @@ export default function Leads() {
   const [inbox, setInbox] = useState('');
   const [vendeu, setVendeu] = useState('');
   const [conflict, setConflict] = useState(false);
+  const [cpf, setCpf] = useState('');
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const q = useDebounced(search, 300);
 
-  const params = { search: q, status, period, inbox_id: inbox, vendeu, conflict: conflict ? 1 : undefined };
-  const leads = useAsync(() => api.get<Paged<Lead>>(`/leads${qs({ ...params, page, page_size: 25 })}`), [q, status, period, inbox, vendeu, conflict, page]);
+  const params = { search: q, status, period, inbox_id: inbox, vendeu, cpf, conflict: conflict ? 1 : undefined };
+  const leads = useAsync(() => api.get<Paged<Lead>>(`/leads${qs({ ...params, page, page_size: 25 })}`), [q, status, period, inbox, vendeu, cpf, conflict, page]);
   const inboxes = useAsync(() => api.get<Inbox[]>('/inboxes'), []);
   const resetPage = <T,>(fn: (v: T) => void) => (v: T) => {
     fn(v);
@@ -33,7 +34,7 @@ export default function Leads() {
 
   const data = leads.data;
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
-  const filtersActive = Boolean(status || period !== 'all' || inbox || vendeu || conflict || q);
+  const filtersActive = Boolean(status || period !== 'all' || inbox || vendeu || cpf || conflict || q);
 
   return (
     <>
@@ -79,6 +80,11 @@ export default function Leads() {
             <Select value={inbox} onChange={(e) => resetPage(setInbox)(e.target.value)} aria-label="Caixa" className="!h-8 !w-auto rounded-full !text-[13px]">
               <option value="">Todas as caixas</option>
               {inboxes.data?.map((i) => <option key={i.id} value={i.id}>{i.custom_name || i.name}</option>)}
+            </Select>
+            <Select value={cpf} onChange={(e) => resetPage(setCpf)(e.target.value)} aria-label="CPF" className="!h-8 !w-auto rounded-full !text-[13px]">
+              <option value="">Com e sem CPF</option>
+              <option value="com">Com CPF</option>
+              <option value="sem">Sem CPF</option>
             </Select>
             <Select value={vendeu} onChange={(e) => resetPage(setVendeu)(e.target.value)} aria-label="Venda" className="!h-8 !w-auto rounded-full !text-[13px]">
               <option value="">Com e sem venda</option>
