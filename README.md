@@ -26,8 +26,8 @@ A cada push no `main`, o GitHub Actions roda os testes, testa o container e publ
 `ghcr.io/netsalobo-alt/chatanalytics:latest`. A stack do Portainer está em [`docker-compose.yml`](docker-compose.yml)
 e o passo a passo completo em [docs/PORTAINER.md](docs/PORTAINER.md).
 
-Endereço: **https://analytics.m2auto.com.br**, servido pelo Traefik que já roda no servidor (labels no compose,
-sem portas publicadas). Rede do Traefik: `Mosqueironet`. Variáveis obrigatórias na stack: `ADMIN_EMAIL` e `ADMIN_PASSWORD`.
+Endereço: **https://analytics.m2auto.com.br**, servido pelo Traefik (v3, Docker Swarm) que já roda no servidor,
+com as mesmas labels do M2 (rede `Mosqueironet`, sem portas publicadas). Variáveis obrigatórias na stack: `ADMIN_EMAIL` e `ADMIN_PASSWORD`.
 O banco SQLite fica no volume `chatanalytics_data`.
 
 ## Chatwoot

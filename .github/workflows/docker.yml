@@ -33,7 +33,7 @@ jobs:
         run: |
           ADMIN_EMAIL=ci@teste.local ADMIN_PASSWORD=senha-ci-123 docker compose config > stack.yml
           grep -q 'Host(`analytics.m2auto.com.br`)' stack.yml
-          grep -q 'name: Mosqueironet' stack.yml
+          grep -q 'traefik.swarm.network=Mosqueironet' stack.yml
           cat stack.yml
 
       - uses: docker/setup-qemu-action@v3

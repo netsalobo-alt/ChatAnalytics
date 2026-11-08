@@ -19,12 +19,13 @@ A imagem é montada automaticamente pelo GitHub a cada atualização do `main`, 
    Também é possível deixar o pacote público (https://github.com/netsalobo-alt?tab=packages › **chatanalytics** ›
    **Package settings › Change visibility**). Isso expõe o código da aplicação, mas não os dados.
 3. **Dados do Traefik.** O servidor já tem um Traefik nas portas 80/443 (é ele que serve o `m2auto.com.br`), na rede
-   **`Mosqueironet`**. O compose já vem com esta rede, o entrypoint `websecure` e o certresolver `letsencryptresolver`.
-   Só mude algo se o seu Traefik usar outros nomes. Para conferir, veja a stack do M2 ou a do Traefik:
+   **`Mosqueironet`** (Traefik v3 em Docker Swarm). O compose usa as mesmas labels da stack do M2: rede `Mosqueironet`,
+   entrypoint `websecure` e certresolver `letsencryptresolver`. Para conferir, veja a stack do M2 ou a do Traefik:
    - **Portainer › Stacks › m2-veiculos › Editor**, procure as linhas `traefik.`:
-     - `...entrypoints=` → valor de `TRAEFIK_ENTRYPOINT` (ex.: `websecure`);
-     - `...tls.certresolver=` → valor de `TRAEFIK_CERTRESOLVER` (padrão `letsencryptresolver`);
-     - na seção `networks:` do fim do arquivo, o `name:` da rede externa → valor de `TRAEFIK_NETWORK`.
+     - `...entrypoints=` (hoje `websecure`);
+     - `...tls.certresolver=` (hoje `letsencryptresolver`);
+     - `traefik.swarm.network=` (hoje `Mosqueironet`).
+     Se algum mudar, ajuste a linha correspondente no `docker-compose.yml`.
    - Se a stack do M2 não tiver essas linhas, veja em **Containers › (container do traefik) › Inspect**:
      a rede aparece em *Networks* e os nomes do entrypoint e do certresolver nos argumentos (`--entrypoints.NOME.address=:443`,
      `--certificatesresolvers.NOME.acme...`).
@@ -41,10 +42,6 @@ A imagem é montada automaticamente pelo GitHub a cada atualização do `main`, 
    | --- | --- | --- |
    | `ADMIN_EMAIL` | e-mail do administrador | sim |
    | `ADMIN_PASSWORD` | senha forte, mínimo 8 caracteres | sim |
-   | `TRAEFIK_NETWORK` | rede do Traefik (padrão `Mosqueironet`) | se for diferente |
-   | `TRAEFIK_ENTRYPOINT` | entrypoint HTTPS (padrão `websecure`) | se for diferente |
-   | `TRAEFIK_CERTRESOLVER` | certresolver (padrão `letsencryptresolver`) | se for diferente |
-   | `DOMINIO` | padrão `analytics.m2auto.com.br` | não |
    | `ADMIN_NAME` | nome exibido (padrão `Administrador`) | não |
 
    O administrador é criado **só na primeira vez**, com o banco vazio. Depois, a senha é trocada pelo próprio sistema
@@ -62,8 +59,7 @@ Traefik do servidor.
 O sistema confia no proxy (`trust proxy`): marca o cookie como `Secure` e monta a URL do webhook com
 `https://analytics.m2auto.com.br` automaticamente.
 
-O compose traz as labels nos dois formatos (container e `deploy.labels`), então funciona com o Traefik em Docker
-comum ou em Docker Swarm.
+As labels ficam em `deploy.labels`, que é onde o Traefik em Docker Swarm as lê.
 
 ## 4. Primeiro acesso
 
@@ -107,9 +103,9 @@ docker run --rm -v chatanalytics_data:/data -v "$PWD":/backup alpine \
 | --- | --- | --- |
 | Deploy falha com "Defina ADMIN_EMAIL/ADMIN_PASSWORD" | variável não preenchida | adicione em Environment variables |
 | `unauthorized` ou `denied` ao baixar a imagem | registro GHCR não cadastrado, ou imagem ainda não publicada | item 1; confira se o workflow está verde |
-| Deploy falha com "network ... not found" | `TRAEFIK_NETWORK` com nome errado | confira o nome exato da rede (item 1.3) |
-| Site responde `404 page not found` | Traefik não está vendo o container | rede ou entrypoint errados; confira `TRAEFIK_NETWORK` e `TRAEFIK_ENTRYPOINT` |
-| `Gateway Timeout` / `Bad Gateway` | container em outra rede | a rede da stack precisa ser a mesma do Traefik |
-| Navegador acusa "TRAEFIK DEFAULT CERT" | certresolver com nome errado | ajuste `TRAEFIK_CERTRESOLVER` e faça redeploy |
+| Deploy falha com "network ... not found" | rede com nome errado | confira o nome exato da rede (item 1.3) |
+| Site responde `404 page not found` | serviço não está rodando, ou labels erradas | em Services, veja se está 1/1 e abra as Tasks para ler o erro |
+| `Gateway Timeout` / `Bad Gateway` | serviço em outra rede | a rede da stack precisa ser a mesma do Traefik |
+| Navegador acusa "TRAEFIK DEFAULT CERT" | certresolver com nome errado | ajuste a label `certresolver` e atualize a stack |
 | Login não fica salvo | acesso por `http` | use sempre https://analytics.m2auto.com.br |
 | Container reinicia com `EACCES` | pasta do host com outro dono | use o volume nomeado do compose, ou `chown -R 1000:1000` na pasta |
