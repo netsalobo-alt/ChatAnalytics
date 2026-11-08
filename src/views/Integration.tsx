@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Copy, DownloadCloud, KeyRound, RefreshCw, Tag as TagIcon, UploadCloud, Webhook } from 'lucide-react';
 import { api } from '../lib/api.ts';
 import { useAsync } from '../lib/hooks.ts';
+import { useLive } from '../lib/live.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { dateTime, relative } from '../lib/format.ts';
 import { Button, Card, Dialog, ErrorNote, Segmented, Field, Input, PageHeader, Select, Skeleton, Tag, Toggle, useToast, cx } from '../components/ui.tsx';
@@ -16,6 +17,10 @@ export default function Integration() {
   const [form, setForm] = useState({ chatwoot_url: '', account_id: '', api_token: '', labels_on_approve: '', labels_on_reject: '' });
   const [busy, setBusy] = useState<'save' | 'test' | 'sync' | 'full' | null>(null);
   const s = settings.data;
+  useLive(['webhook', 'sync'], () => {
+    logs.reload();
+    settings.reload();
+  }, 400);
 
   useEffect(() => {
     if (s) setForm({ chatwoot_url: s.chatwoot_url, account_id: s.account_id, api_token: '', labels_on_approve: s.labels_on_approve, labels_on_reject: s.labels_on_reject });
@@ -143,32 +148,9 @@ export default function Integration() {
               </div>
             </Card>
 
-            {admin && <BackupCard onImported={() => { settings.reload(); }} />}
+            <WebhookLogCard logs={logs.data} onReload={logs.reload} />
 
-            <Card title="Eventos recebidos" subtitle="Últimas chamadas do webhook" action={<Button size="sm" variant="plain" onClick={logs.reload}>Atualizar</Button>} bodyClass="!px-0 !pb-2">
-              {!logs.data ? (
-                <div className="px-6"><Skeleton className="h-32" /></div>
-              ) : logs.data.length === 0 ? (
-                <p className="px-6 py-8 text-center text-[14px] text-label-3">Nenhum evento recebido ainda.</p>
-              ) : (
-                <ul className="max-h-[420px] overflow-y-auto">
-                  {logs.data.slice(0, 60).map((l) => (
-                    <li key={l.id} className="border-t border-separator px-6 py-2.5 first:border-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[13px] font-medium">{l.contact_name || l.event}</span>
-                        <Tag tone={l.status === 'processed' ? 'green' : l.status === 'error' ? 'red' : 'neutral'}>
-                          {l.status === 'processed' ? 'processado' : l.status === 'error' ? 'erro' : 'ignorado'}
-                        </Tag>
-                      </div>
-                      <div className="mt-0.5 flex justify-between gap-2 text-[12px] text-label-3">
-                        <span className="truncate">{l.summary}</span>
-                        <span className="shrink-0" title={dateTime(l.received_at)}>{relative(l.received_at)}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
+            {admin && <BackupCard onImported={() => { settings.reload(); }} />}
           </div>
         </div>
       )}
@@ -264,6 +246,89 @@ function BackupCard({ onImported }: { onImported: () => void }) {
               : 'Apaga todos os leads, investimentos e caixas atuais antes de importar. Não dá para desfazer.'}
           </p>
         </Dialog>
+      )}
+    </Card>
+  );
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  message_created: 'Mensagem criada',
+  message_updated: 'Mensagem atualizada',
+  conversation_created: 'Conversa criada',
+  conversation_updated: 'Conversa atualizada',
+  conversation_status_changed: 'Status da conversa',
+  conversation_opened: 'Conversa aberta',
+};
+
+function webhookHealth(logs: WebhookLog[]) {
+  const last = logs[0];
+  if (!last) return { tone: 'gray', title: 'Nenhum evento recebido', text: 'Cadastre a URL acima no Chatwoot (Configurações › Integrações › Webhooks).' };
+  const mins = (Date.now() - new Date(last.received_at).getTime()) / 60_000;
+  if (last.status === 'error') return { tone: 'red', title: 'Último evento com erro', text: last.summary };
+  if (mins <= 30) return { tone: 'green', title: 'Webhook funcionando', text: `Último evento ${relative(last.received_at)}.` };
+  if (mins <= 24 * 60) return { tone: 'orange', title: `Sem eventos ${relative(last.received_at)}`, text: 'Normal fora do horário de atendimento. Se houver conversas novas no Chatwoot, confira o webhook.' };
+  return { tone: 'red', title: `Sem eventos ${relative(last.received_at)}`, text: 'O Chatwoot pode ter parado de enviar. Confira o webhook no Chatwoot.' };
+}
+
+function WebhookLogCard({ logs, onReload }: { logs: WebhookLog[] | null; onReload: () => void }) {
+  // Atualiza os tempos relativos ("há 2 min") sem precisar recarregar.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const health = logs ? webhookHealth(logs) : null;
+  const tones: Record<string, { dot: string; bg: string; text: string }> = {
+    green: { dot: 'bg-green-fill', bg: 'bg-green-soft', text: 'text-green' },
+    orange: { dot: 'bg-orange-fill', bg: 'bg-orange-soft', text: 'text-orange' },
+    red: { dot: 'bg-red-fill', bg: 'bg-red-soft', text: 'text-red' },
+    gray: { dot: 'bg-label-3', bg: 'bg-fill-2', text: 'text-label-2' },
+  };
+  const t = health ? tones[health.tone] : tones.gray;
+
+  return (
+    <Card
+      title="Log do webhook"
+      subtitle="Últimos 5 eventos recebidos do Chatwoot. Os mais antigos são descartados."
+      action={<Button size="sm" variant="plain" onClick={onReload}>Atualizar</Button>}
+      bodyClass="!px-0 !pb-2"
+    >
+      {!logs || !health ? (
+        <div className="px-6"><Skeleton className="h-32" /></div>
+      ) : (
+        <>
+          <div className={cx('mx-6 mb-3 flex gap-3 rounded-xl p-3', t.bg)}>
+            <span className="relative mt-1.5 flex size-2.5 shrink-0">
+              {health.tone === 'green' && <span className={cx('absolute inline-flex size-full animate-ping rounded-full opacity-60', t.dot)} />}
+              <span className={cx('relative inline-flex size-2.5 rounded-full', t.dot)} />
+            </span>
+            <div className="min-w-0">
+              <div className={cx('text-[14px] font-semibold', t.text)}>{health.title}</div>
+              <div className="text-[12px] text-label-2">{health.text}</div>
+            </div>
+          </div>
+          {logs.length > 0 && (
+            <ul>
+              {logs.map((l) => (
+                <li key={l.id} className="animate-fade-up border-t border-separator px-6 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[13px] font-medium">
+                      {EVENT_LABEL[l.event] ?? l.event}
+                      {l.contact_name && <span className="font-normal text-label-2"> · {l.contact_name}</span>}
+                    </span>
+                    <Tag tone={l.status === 'processed' ? 'green' : l.status === 'error' ? 'red' : 'neutral'}>
+                      {l.status === 'processed' ? 'processado' : l.status === 'error' ? 'erro' : 'ignorado'}
+                    </Tag>
+                  </div>
+                  <div className="mt-0.5 flex justify-between gap-2 text-[12px] text-label-3">
+                    <span className="truncate" title={l.summary}>{l.summary}</span>
+                    <span className="shrink-0" title={dateTime(l.received_at)}>{relative(l.received_at)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </Card>
   );

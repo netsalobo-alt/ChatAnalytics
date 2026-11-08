@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Pencil, RefreshCw, Waypoints } from 'lucide-react';
 import { api, qs } from '../lib/api.ts';
 import { useAsync } from '../lib/hooks.ts';
+import { useLive } from '../lib/live.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { moneyShort, number, percent } from '../lib/format.ts';
 import { Button, Card, Empty, ErrorNote, IconButton, Input, PageHeader, Segmented, Skeleton, Tag, Toggle, useToast } from '../components/ui.tsx';
@@ -23,6 +24,7 @@ export default function Channels() {
   const [period, setPeriod] = useState<Period>('last_30_days');
   const inboxes = useAsync(() => api.get<Inbox[]>('/inboxes'), []);
   const stats = useAsync(() => api.get<Analytics>(`/analytics${qs({ period })}`), [period]);
+  useLive(['lead', 'sync'], stats.reload, 1500);
   const [editing, setEditing] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [refreshing, setRefreshing] = useState(false);

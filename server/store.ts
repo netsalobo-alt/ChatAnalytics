@@ -1,6 +1,7 @@
 // Caixas de entrada, investimentos, registro de webhooks e deduplicação de mensagens.
 
 import { db, nowIso } from './db.ts';
+import { broadcast } from './events.ts';
 import type { Inbox, Investment, WebhookLog } from '../shared/types.ts';
 
 // ---------- Caixas de entrada ----------
@@ -106,7 +107,8 @@ export function investedByMonth(): Map<string, number> {
 
 // ---------- Webhooks ----------
 
-const MAX_LOGS = 500;
+/** Guarda só os últimos eventos: o suficiente para saber se o webhook está chegando. */
+export const MAX_LOGS = 5;
 
 export function logWebhook(e: Omit<WebhookLog, 'id' | 'received_at'>) {
   db.prepare(
@@ -114,9 +116,10 @@ export function logWebhook(e: Omit<WebhookLog, 'id' | 'received_at'>) {
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(nowIso(), e.event, e.status, e.summary, e.conversation_id, e.contact_name, e.lead_id);
   db.prepare('DELETE FROM webhook_logs WHERE id <= (SELECT MAX(id) FROM webhook_logs) - ?').run(MAX_LOGS);
+  broadcast('webhook', { status: e.status });
 }
 
-export function listWebhookLogs(limit = 100): WebhookLog[] {
+export function listWebhookLogs(limit = MAX_LOGS): WebhookLog[] {
   return db.prepare('SELECT * FROM webhook_logs ORDER BY id DESC LIMIT ?').all(limit) as unknown as WebhookLog[];
 }
 

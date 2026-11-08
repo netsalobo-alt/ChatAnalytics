@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, Download, Inbox as InboxIcon, Plus, Search } from 'lucide-react';
 import { api, qs } from '../lib/api.ts';
 import { useAsync, useDebounced } from '../lib/hooks.ts';
+import { useLive } from '../lib/live.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { money, number, phone, relative } from '../lib/format.ts';
 import { Avatar, Button, Card, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Select, Skeleton, StatusPill, Tag, useToast, cx } from '../components/ui.tsx';
@@ -27,6 +28,7 @@ export default function Leads() {
   const params = { search: q, status, period, inbox_id: inbox, vendeu, cpf, conflict: conflict ? 1 : undefined };
   const leads = useAsync(() => api.get<Paged<Lead>>(`/leads${qs({ ...params, page, page_size: 25 })}`), [q, status, period, inbox, vendeu, cpf, conflict, page]);
   const inboxes = useAsync(() => api.get<Inbox[]>('/inboxes'), []);
+  useLive(['lead', 'sync'], leads.reload);
   const resetPage = <T,>(fn: (v: T) => void) => (v: T) => {
     fn(v);
     setPage(1);

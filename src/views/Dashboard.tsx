@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Cable, RefreshCw, Sparkles } from 'lucide-react';
 import { api, qs } from '../lib/api.ts';
 import { useAsync } from '../lib/hooks.ts';
+import { useLive } from '../lib/live.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { axisLabel, dateShort, money, moneyShort, monthLabel, number, percent, ratio, relative } from '../lib/format.ts';
 import { Button, Card, Change, ErrorNote, PageHeader, Segmented, Select, Skeleton, cx, statusColor, useToast } from '../components/ui.tsx';
@@ -35,6 +36,10 @@ export default function Dashboard() {
   const inboxes = useAsync(() => api.get<Inbox[]>('/inboxes'), []);
   const settings = useAsync(() => api.get<ChatwootSettings>('/settings'), []);
   const a = analytics.data;
+  useLive(['lead', 'sync'], () => {
+    analytics.reload();
+    settings.reload();
+  }, 1500);
   const connected = Boolean(settings.data?.has_token && settings.data.chatwoot_url);
 
   const sync = async () => {

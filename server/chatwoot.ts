@@ -2,6 +2,7 @@
 
 import { getSettings, setSettings, chatwootReady, parseLabels, type SettingsShape } from './settings.ts';
 import { claimMessage, getInbox, inboxLabel, logWebhook, saveRemoteInboxes } from './store.ts';
+import { broadcast } from './events.ts';
 import { applyRescan, getLead, upsertFromChatwoot } from './leads.ts';
 import type { Channel, ClientMessage, Lead } from '../shared/types.ts';
 
@@ -140,6 +141,7 @@ export async function syncConversations(opts: { full?: boolean } = {}): Promise<
     }
     const message = `${conversations} conversas lidas, ${created} novos leads.`;
     setSettings({ last_sync_at: new Date().toISOString(), last_sync_status: 'success', last_sync_message: message });
+    broadcast('sync', { conversations, created });
     return { conversations, created, message };
   } catch (err) {
     setSettings({ last_sync_status: 'error', last_sync_message: (err as Error).message });

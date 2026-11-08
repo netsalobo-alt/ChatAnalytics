@@ -21,10 +21,11 @@ import {
 } from './leads.ts';
 import { chatwootReady, getSettings, setSettings, webhookSecret } from './settings.ts';
 import {
-  addInvestment, clearWebhookLogs, deleteInvestment, investmentProblem, listInboxes, listInvestments, listWebhookLogs,
+  addInvestment, clearWebhookLogs, logWebhook, deleteInvestment, investmentProblem, listInboxes, listInvestments, listWebhookLogs,
   updateInbox, updateInvestment, getInbox, inboxLabel,
 } from './store.ts';
 import { rescheduleAutoSync } from './scheduler.ts';
+import { broadcast, liveStream } from './events.ts';
 import { CHANNELS, LEAD_STATUSES, type AnalyticsFilter, type Channel, type ChatwootSettings, type LeadStatus, type Period, type Role } from '../shared/types.ts';
 
 export const api = Router();
@@ -98,15 +99,28 @@ api.post('/webhooks/chatwoot/:secret', (req, res) => {
   const got = Buffer.from(String(req.params.secret));
   if (expected.length !== got.length || !crypto.timingSafeEqual(expected, got)) return fail(res, 404, 'Não encontrado.');
   try {
-    res.json(handleWebhook(req.body ?? {}));
+    const result = handleWebhook(req.body ?? {});
+    if (result.lead_id) broadcast('lead', { id: result.lead_id });
+    res.json(result);
   } catch (err) {
     console.error('[webhook]', err);
+    logWebhook({
+      event: String(req.body?.event ?? 'desconhecido'),
+      status: 'error',
+      summary: `Erro ao processar: ${(err as Error).message}`.slice(0, 300),
+      conversation_id: null,
+      contact_name: null,
+      lead_id: null,
+    });
     res.status(200).json({ status: 'error' }); // 200 para o Chatwoot não reenviar em loop
   }
 });
 
 // A partir daqui, tudo exige sessão.
 api.use(requireRole());
+
+// Eventos ao vivo (as telas se atualizam sozinhas).
+api.get('/events', liveStream);
 
 // ---------- Painel ----------
 
@@ -142,6 +156,7 @@ api.post('/backup/import', requireRole('admin'), (req, res) => {
   const mode = req.body?.mode === 'replace' ? 'replace' : 'merge';
   try {
     const result = importBackup(req.body?.data, mode);
+    broadcast('sync', { imported: result.leads });
     if (chatwootReady()) rescheduleAutoSync();
     res.json(result);
   } catch (err) {
@@ -202,8 +217,7 @@ api.post('/leads', (req, res) => {
   if (!name || !phone) return fail(res, 400, 'Informe nome e telefone.');
   const inbox = num(req.body?.inbox_id) ? getInbox(Number(req.body.inbox_id)) : null;
   const channel = CHANNELS.includes(req.body?.channel) ? (req.body.channel as Channel) : 'Outros';
-  res.status(201).json(
-    createManualLead({
+  const created = createManualLead({
       account_id: getSettings().account_id,
       contact_name: name,
       contact_phone: phone,
@@ -211,8 +225,9 @@ api.post('/leads', (req, res) => {
       channel,
       inbox_id: inbox?.id ?? null,
       inbox_name: inboxLabel(inbox),
-    }),
-  );
+  });
+  broadcast('lead', { id: created.id });
+  res.status(201).json(created);
 });
 
 const PATCHABLE = [
@@ -238,6 +253,7 @@ api.patch('/leads/:id', async (req, res) => {
       warning = `Lead salvo, mas não foi possível atualizar as etiquetas no Chatwoot: ${(err as Error).message}`;
     }
   }
+  broadcast('lead', { id: lead.id });
   res.json({ lead, warning });
 });
 
@@ -245,6 +261,7 @@ api.post('/leads/:id/rescan', async (req, res) => {
   try {
     const result = await rescanLead(req.params.id);
     if (!result) return fail(res, 404, 'Lead não encontrado.');
+    broadcast('lead', { id: result.lead.id });
     res.json(result);
   } catch (err) {
     chatwootFail(res, err);
@@ -252,7 +269,9 @@ api.post('/leads/:id/rescan', async (req, res) => {
 });
 
 api.delete('/leads/:id', requireRole('manager'), (req, res) => {
-  return deleteLead(String(req.params.id)) ? res.json({ ok: true }) : fail(res, 404, 'Lead não encontrado.');
+  if (!deleteLead(String(req.params.id))) return fail(res, 404, 'Lead não encontrado.');
+  broadcast('lead', { id: String(req.params.id), deleted: true });
+  res.json({ ok: true });
 });
 
 // ---------- Caixas de entrada ----------
@@ -374,7 +393,7 @@ api.post('/sync', requireRole('manager'), async (req, res) => {
   }
 });
 
-api.get('/webhook-logs', requireRole('manager'), (_req, res) => res.json(listWebhookLogs(200)));
+api.get('/webhook-logs', requireRole('manager'), (_req, res) => res.json(listWebhookLogs()));
 api.delete('/webhook-logs', requireRole('admin'), (_req, res) => {
   clearWebhookLogs();
   res.json({ ok: true });

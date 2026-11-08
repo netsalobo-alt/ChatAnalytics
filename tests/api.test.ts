@@ -187,3 +187,40 @@ test('backup e importação exigem administrador', async () => {
   assert.equal((await call('GET', '/backup', undefined, login.cookie)).status, 403);
   assert.equal((await call('GET', '/reports', undefined, login.cookie)).status, 403);
 });
+
+test('log do webhook guarda só os 5 últimos eventos', async () => {
+  for (let i = 0; i < 7; i++) {
+    await call('POST', `/webhooks/chatwoot/${webhookSecret()}`, { event: 'conversation_status_changed', id: i }, '');
+  }
+  const logs = (await call('GET', '/webhook-logs')).data;
+  assert.equal(logs.length, 5);
+  assert.ok(logs[0].id > logs[4].id, 'mais recente primeiro');
+});
+
+test('eventos ao vivo avisam quando chega um lead pelo webhook', async () => {
+  const ctrl = new AbortController();
+  const res = await fetch(`${base}/events`, { headers: { Cookie: adminCookie }, signal: ctrl.signal });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  await reader.read(); // "retry:" inicial
+  await call('POST', `/webhooks/chatwoot/${webhookSecret()}`, {
+    event: 'message_created', id: 777001, content: 'oi, quero informações', message_type: 'incoming',
+    created_at: new Date().toISOString(), sender: { id: 4242, name: 'Lead Ao Vivo', type: 'contact' },
+    conversation: { id: 9001, inbox_id: 3 }, account: { id: 5 },
+  }, '');
+  const deadline = Date.now() + 3000;
+  while (!text.includes('event: lead') && Date.now() < deadline) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value);
+  }
+  ctrl.abort();
+  assert.match(text, /event: lead\ndata: \{"id":"5_4242"\}/);
+});
+
+test('eventos ao vivo exigem login', async () => {
+  assert.equal((await call('GET', '/events', undefined, '')).status, 401);
+});

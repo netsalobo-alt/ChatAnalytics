@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import { BarChart3, Cable, FileText, LogOut, Megaphone, Rows3, Users, Waypoints } from 'lucide-react';
 import { api, setUnauthorizedHandler } from './lib/api.ts';
 import { useHashRoute } from './lib/hooks.ts';
+import { closeLive, useLiveStatus } from './lib/live.ts';
 import { SessionCtx, can, useSession, type Session } from './lib/session.tsx';
 import { Avatar, cx } from './components/ui.tsx';
 import { ROLE_LABEL, type Role, type User } from '../shared/types.ts';
@@ -41,7 +42,10 @@ export default function App() {
   });
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setState((s) => ({ ...s, user: null })));
+    setUnauthorizedHandler(() => {
+      closeLive();
+      setState((s) => ({ ...s, user: null }));
+    });
     api
       .get<{ user: User | null; needs_setup: boolean }>('/auth/me')
       .then((r) => setState({ loading: false, user: r.user, needsSetup: r.needs_setup }))
@@ -55,6 +59,7 @@ export default function App() {
             user: state.user,
             setUser: (u) => setState((s) => ({ ...s, user: u })),
             logout: async () => {
+              closeLive();
               await api.post('/auth/logout').catch(() => {});
               setState((s) => ({ ...s, user: null }));
             },
@@ -122,7 +127,8 @@ function Shell() {
             );
           })}
         </nav>
-        <div className="m-3 flex items-center gap-3 rounded-[14px] p-2.5 hover:bg-fill-2">
+        <LiveBadge />
+        <div className="m-3 mt-1 flex items-center gap-3 rounded-[14px] p-2.5 hover:bg-fill-2">
           <Avatar name={user.name} size={34} />
           <div className="min-w-0 flex-1 leading-tight">
             <div className="truncate text-[13px] font-semibold">{user.name}</div>
@@ -165,3 +171,16 @@ function Shell() {
   );
 }
 
+
+function LiveBadge() {
+  const on = useLiveStatus();
+  return (
+    <div className="mx-6 flex items-center gap-2 text-[12px] text-label-3" title={on ? 'As telas se atualizam sozinhas' : 'Reconectando…'}>
+      <span className="relative flex size-2">
+        {on && <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-fill opacity-60" />}
+        <span className={cx('relative inline-flex size-2 rounded-full', on ? 'bg-green-fill' : 'bg-label-3')} />
+      </span>
+      {on ? 'Ao vivo' : 'Reconectando…'}
+    </div>
+  );
+}
