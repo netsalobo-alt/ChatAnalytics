@@ -102,6 +102,8 @@ function normalizeLead(raw: Json): LeadDetail | null {
     sale_date: vendeu ? iso(raw.sale_date ?? raw.conversion_date ?? raw.last_interaction_at, entry) : null,
     observacao: str(raw.observacao),
     motivo_reprovacao: str(raw.motivo_reprovacao),
+    veiculo: str(raw.veiculo),
+    criativo: str(raw.criativo),
     chatwoot_url: str(raw.chatwoot_url),
     channel: CHANNELS.includes(raw.channel) ? (raw.channel as Channel) : 'Outros',
     inbox_id: raw.inbox_id == null ? null : Number(raw.inbox_id) || null,

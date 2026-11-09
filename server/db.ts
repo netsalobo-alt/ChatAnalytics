@@ -103,6 +103,11 @@ const MIGRATIONS: string[] = [
     at TEXT NOT NULL
   );
   `,
+  `
+  ALTER TABLE leads ADD COLUMN veiculo TEXT;
+  ALTER TABLE leads ADD COLUMN criativo TEXT;
+  CREATE INDEX leads_criativo ON leads(criativo);
+  `,
 ];
 
 function migrate() {

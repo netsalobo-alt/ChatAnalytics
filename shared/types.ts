@@ -63,6 +63,8 @@ export interface Lead {
   sale_date: string | null; // ISO — quando a venda foi registrada
   observacao: string | null;
   motivo_reprovacao: string | null;
+  veiculo: string | null; // modelo do veículo de interesse
+  criativo: string | null; // anúncio/criativo de origem (tráfego pago)
   chatwoot_url: string | null;
   channel: Channel;
   inbox_id: number | null;
@@ -226,6 +228,8 @@ export interface Report {
   analytics: Analytics;
   sellers: ReportGroup[];
   stores: ReportGroup[];
+  creatives: ReportGroup[];
+  vehicles: ReportGroup[];
   rejections: { reason: string; count: number }[];
   quality: { total: number; cpf: number; birth: number; cnh: number; conflicts: number };
 }

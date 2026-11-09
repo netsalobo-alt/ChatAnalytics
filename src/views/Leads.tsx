@@ -5,14 +5,17 @@ import { useAsync, useDebounced } from '../lib/hooks.ts';
 import { useLive } from '../lib/live.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { money, number, phone, relative } from '../lib/format.ts';
-import { Avatar, Button, Card, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Select, Skeleton, StatusPill, Tag, useToast, cx } from '../components/ui.tsx';
-import LeadSheet from './LeadSheet.tsx';
+import { Avatar, Button, Card, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Select, Skeleton, Tag, useToast, cx, statusColor } from '../components/ui.tsx';
+import { ChevronDown } from 'lucide-react';
+import LeadSheet, { ApproveDialog, RejectDialog } from './LeadSheet.tsx';
 import { CHANNELS, LEAD_STATUSES, PERIOD_LABEL, STATUS_LABEL, type Channel, type Inbox, type Lead, type LeadStatus, type Paged, type Period } from '../../shared/types.ts';
 
 const PERIOD_OPTIONS: Period[] = ['all', 'today', 'yesterday', 'last_7_days', 'last_30_days', 'this_month', 'last_month', 'this_year'];
 
 export default function Leads() {
   const { user } = useSession();
+  const toast = useToast();
+  const [ask, setAsk] = useState<{ lead: Lead; status: 'APROVADO' | 'REPROVADO' } | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<LeadStatus | ''>('');
   const [period, setPeriod] = useState<Period>('all');
@@ -35,6 +38,19 @@ export default function Leads() {
   };
 
   const data = leads.data;
+
+  const changeStatus = async (lead: Lead, body: Record<string, unknown>) => {
+    const status = body.status as LeadStatus;
+    leads.setData((d) => (d ? { ...d, items: d.items.map((x) => (x.id === lead.id ? { ...x, status } : x)) } : d));
+    try {
+      const r = await api.patch<{ lead: Lead; warning?: string }>(`/leads/${encodeURIComponent(lead.id)}`, body);
+      leads.setData((d) => (d ? { ...d, items: d.items.map((x) => (x.id === lead.id ? r.lead : x)) } : d));
+      toast(r.warning ? 'error' : 'success', r.warning ?? `${lead.contact_name}: ${STATUS_LABEL[status]}.`);
+    } catch (err) {
+      toast('error', (err as Error).message);
+      leads.reload();
+    }
+  };
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   const filtersActive = Boolean(status || period !== 'all' || inbox || vendeu || cpf || conflict || q);
 
@@ -108,12 +124,13 @@ export default function Leads() {
           </Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left">
+            <table className="w-full min-w-[980px] text-left">
               <thead>
                 <tr className="border-b border-separator text-[12px] font-medium text-label-3">
                   <th className="py-3 pl-6 pr-3 font-medium">Contato</th>
                   <th className="px-3 font-medium">Caixa</th>
                   <th className="px-3 font-medium">Status</th>
+                  <th className="px-3 font-medium">Interesse</th>
                   <th className="px-3 font-medium">Dados</th>
                   <th className="px-3 text-right font-medium">Venda</th>
                   <th className="py-3 pl-3 pr-6 text-right font-medium">Entrada</th>
@@ -135,7 +152,25 @@ export default function Leads() {
                       <div className="text-[13px]">{l.inbox_name || l.channel}</div>
                       <div className="text-[12px] text-label-3">{l.channel}</div>
                     </td>
-                    <td className="px-3"><StatusPill status={l.status} /></td>
+                    <td className="px-3">
+                      <StatusSelect
+                        value={l.status}
+                        onChange={(status) => {
+                          if (status === 'APROVADO' || status === 'REPROVADO') setAsk({ lead: l, status });
+                          else changeStatus(l, { status });
+                        }}
+                      />
+                    </td>
+                    <td className="max-w-[200px] px-3">
+                      {l.veiculo || l.criativo ? (
+                        <>
+                          <div className="truncate text-[13px]" title={l.veiculo ?? ''}>{l.veiculo || <span className="text-label-3">Veículo não informado</span>}</div>
+                          {l.criativo && <div className="truncate text-[12px] text-label-3" title={l.criativo}>{l.criativo}</div>}
+                        </>
+                      ) : (
+                        <span className="text-[13px] text-label-3">—</span>
+                      )}
+                    </td>
                     <td className="px-3">
                       <div className="flex flex-wrap gap-1">
                         {l.cpf_conflict ? <Tag tone="orange">Conflito CPF</Tag> : l.cpf ? <Tag tone={l.cpf_valid ? 'green' : 'red'}>CPF</Tag> : null}
@@ -166,6 +201,25 @@ export default function Leads() {
       </Card>
 
       {openId && <LeadSheet id={openId} onClose={() => setOpenId(null)} onChanged={leads.reload} />}
+      {ask?.status === 'APROVADO' && (
+        <ApproveDialog
+          lead={ask.lead}
+          onClose={() => setAsk(null)}
+          onConfirm={(valor) => {
+            changeStatus(ask.lead, { status: 'APROVADO', vendeu: true, valor_venda: valor });
+            setAsk(null);
+          }}
+        />
+      )}
+      {ask?.status === 'REPROVADO' && (
+        <RejectDialog
+          onClose={() => setAsk(null)}
+          onConfirm={(motivo) => {
+            changeStatus(ask.lead, { status: 'REPROVADO', motivo_reprovacao: motivo });
+            setAsk(null);
+          }}
+        />
+      )}
       {creating && (
         <NewLeadDialog
           inboxes={inboxes.data ?? []}
@@ -198,7 +252,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 
 function NewLeadDialog({ inboxes, onClose, onCreated }: { inboxes: Inbox[]; onClose: () => void; onCreated: (l: Lead) => void }) {
   const toast = useToast();
-  const [form, setForm] = useState({ contact_name: '', contact_phone: '', contact_email: '', channel: 'WhatsApp' as Channel, inbox_id: '' });
+  const [form, setForm] = useState({ contact_name: '', contact_phone: '', contact_email: '', channel: 'WhatsApp' as Channel, inbox_id: '', veiculo: '', criativo: '' });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [k]: e.target.value });
 
@@ -230,6 +284,8 @@ function NewLeadDialog({ inboxes, onClose, onCreated }: { inboxes: Inbox[]; onCl
         <Field label="Nome"><Input value={form.contact_name} onChange={set('contact_name')} autoFocus /></Field>
         <Field label="Telefone"><Input value={form.contact_phone} onChange={set('contact_phone')} placeholder="+55 91 9…" inputMode="tel" /></Field>
         <Field label="E-mail (opcional)"><Input value={form.contact_email} onChange={set('contact_email')} type="email" /></Field>
+        <Field label="Veículo de interesse (opcional)"><Input value={form.veiculo} onChange={set('veiculo')} placeholder="Ex.: Onix LT 2022" /></Field>
+        <Field label="Criativo / anúncio (opcional)"><Input value={form.criativo} onChange={set('criativo')} placeholder="Ex.: Reels Onix Black Friday" /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Canal">
             <Select value={form.channel} onChange={set('channel')}>{CHANNELS.map((c) => <option key={c}>{c}</option>)}</Select>
@@ -243,5 +299,24 @@ function NewLeadDialog({ inboxes, onClose, onCreated }: { inboxes: Inbox[]; onCl
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** Status editável direto na lista: um seletor com a aparência do selo de status. */
+function StatusSelect({ value, onChange }: { value: LeadStatus; onChange: (s: LeadStatus) => void }) {
+  const c = statusColor(value);
+  return (
+    <span className={cx('relative inline-flex items-center rounded-full', c.bg)} onClick={(e) => e.stopPropagation()}>
+      <span className={cx('pointer-events-none absolute left-2.5 size-1.5 rounded-full', c.dot)} />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as LeadStatus)}
+        aria-label="Alterar status"
+        className={cx('cursor-pointer appearance-none rounded-full bg-transparent py-1 pl-6 pr-7 text-[12px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent', c.text)}
+      >
+        {LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+      </select>
+      <ChevronDown className={cx('pointer-events-none absolute right-2 size-3.5', c.text)} />
+    </span>
   );
 }

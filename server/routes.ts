@@ -191,7 +191,7 @@ api.get('/leads/export.csv', requireRole('manager'), (req, res) => {
     ['Nome', 'contact_name'], ['Telefone', 'contact_phone'], ['E-mail', 'contact_email'], ['Entrada', 'entry_date'],
     ['Canal', 'channel'], ['Caixa', 'inbox_name'], ['Status', 'status'], ['CPF', 'cpf'], ['Nascimento', 'birth_date'],
     ['CNH', 'cnh'], ['Vendedor', 'vendedor'], ['Loja', 'loja'], ['Vendeu', 'vendeu'], ['Valor', 'valor_venda'],
-    ['Data da venda', 'sale_date'], ['Motivo reprovação', 'motivo_reprovacao'], ['Observação', 'observacao'],
+    ['Data da venda', 'sale_date'], ['Motivo reprovação', 'motivo_reprovacao'], ['Veículo de interesse', 'veiculo'], ['Criativo', 'criativo'], ['Observação', 'observacao'],
     ['Conversa', 'chatwoot_url'],
   ] as const;
   const esc = (v: unknown) => {
@@ -225,6 +225,8 @@ api.post('/leads', (req, res) => {
       channel,
       inbox_id: inbox?.id ?? null,
       inbox_name: inboxLabel(inbox),
+      veiculo: str(req.body?.veiculo),
+      criativo: str(req.body?.criativo),
   });
   broadcast('lead', { id: created.id });
   res.status(201).json(created);
@@ -232,7 +234,7 @@ api.post('/leads', (req, res) => {
 
 const PATCHABLE = [
   'contact_name', 'contact_phone', 'contact_email', 'cpf', 'birth_date', 'cnh', 'status', 'vendedor', 'loja', 'vendeu',
-  'valor_venda', 'observacao', 'motivo_reprovacao',
+  'valor_venda', 'observacao', 'motivo_reprovacao', 'veiculo', 'criativo',
 ] as const;
 
 api.patch('/leads/:id', async (req, res) => {

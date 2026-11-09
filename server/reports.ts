@@ -47,6 +47,8 @@ export function computeReport(f: AnalyticsFilter): Report {
     analytics,
     sellers: group('vendedor', 'Sem vendedor'),
     stores: group('loja', 'Sem loja'),
+    creatives: group('criativo', 'Sem criativo'),
+    vehicles: group('veiculo', 'Não informado'),
     rejections,
     quality: {
       total: Number(q.total) || 0,

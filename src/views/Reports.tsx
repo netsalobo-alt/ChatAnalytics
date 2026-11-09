@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Download, Printer } from 'lucide-react';
 import { api, qs } from '../lib/api.ts';
+import { dayKey } from '../../shared/dates.ts';
 import { useAsync } from '../lib/hooks.ts';
 import { dateShort, dateTime, money, monthLabel, number, percent, ratio } from '../lib/format.ts';
 import { Button, Card, ErrorNote, Input, PageHeader, Segmented, Select, Skeleton, cx, statusColor } from '../components/ui.tsx';
@@ -15,7 +16,7 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: 'custom', label: 'Datas' },
 ];
 
-const today = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+const today = () => dayKey();
 
 export default function Reports() {
   const [period, setPeriod] = useState<Period>('this_month');
@@ -137,6 +138,11 @@ export default function Reports() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Vendedores"><GroupTable rows={r.sellers} /></Card>
             <Card title="Lojas"><GroupTable rows={r.stores} /></Card>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="Criativos" subtitle="Desempenho por anúncio de origem"><GroupTable rows={r.creatives} /></Card>
+            <Card title="Veículos de interesse"><GroupTable rows={r.vehicles} /></Card>
           </div>
 
           <Card title="Motivos de reprovação">

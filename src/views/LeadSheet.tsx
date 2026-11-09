@@ -21,6 +21,8 @@ type Form = {
   valor_venda: string;
   observacao: string;
   motivo_reprovacao: string;
+  veiculo: string;
+  criativo: string;
 };
 
 const toForm = (l: LeadDetail): Form => ({
@@ -37,6 +39,8 @@ const toForm = (l: LeadDetail): Form => ({
   valor_venda: l.valor_venda ? String(l.valor_venda).replace('.', ',') : '',
   observacao: l.observacao ?? '',
   motivo_reprovacao: l.motivo_reprovacao ?? '',
+  veiculo: l.veiculo ?? '',
+  criativo: l.criativo ?? '',
 });
 
 const parseMoney = (s: string) => {
@@ -48,6 +52,7 @@ export default function LeadSheet({ id, onClose, onChanged }: { id: string; onCl
   const { user } = useSession();
   const toast = useToast();
   const lead = useAsync(() => api.get<LeadDetail>(`/leads/${encodeURIComponent(id)}`), [id]);
+  const facets = useAsync(() => api.get<{ veiculos: string[]; criativos: string[] }>('/leads/facets'), []);
   const [form, setForm] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -183,6 +188,19 @@ export default function LeadSheet({ id, onClose, onChanged }: { id: string; onCl
             </div>
           </Section>
 
+          <Section title="Interesse">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Veículo de interesse">
+                <Input value={form.veiculo} onChange={(e) => set('veiculo', e.target.value)} placeholder="Ex.: Onix LT 2022" list="opt-veiculos" />
+              </Field>
+              <Field label="Criativo / anúncio" hint="De qual anúncio o cliente veio. Em breve, preenchido automaticamente.">
+                <Input value={form.criativo} onChange={(e) => set('criativo', e.target.value)} placeholder="Ex.: Reels Onix Black Friday" list="opt-criativos" />
+              </Field>
+            </div>
+            <datalist id="opt-veiculos">{facets.data?.veiculos.map((v) => <option key={v} value={v} />)}</datalist>
+            <datalist id="opt-criativos">{facets.data?.criativos.map((v) => <option key={v} value={v} />)}</datalist>
+          </Section>
+
           <Section
             title="Qualificação"
             action={l.conversation_id ? <Button size="sm" variant="plain" loading={scanning} icon={<ScanSearch className="size-4" />} onClick={rescan}>Buscar nas mensagens</Button> : null}
@@ -280,7 +298,7 @@ function QuickAction({ tone, active, children, ...rest }: React.ButtonHTMLAttrib
   );
 }
 
-function ApproveDialog({ lead, onClose, onConfirm }: { lead: LeadDetail; onClose: () => void; onConfirm: (valor: number) => void }) {
+export function ApproveDialog({ lead, onClose, onConfirm }: { lead: { valor_venda: number }; onClose: () => void; onConfirm: (valor: number) => void }) {
   const [valor, setValor] = useState(lead.valor_venda ? String(lead.valor_venda).replace('.', ',') : '');
   return (
     <Dialog title="Aprovar lead" onClose={onClose} footer={<><Button onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={() => onConfirm(parseMoney(valor))}>Aprovar</Button></>}>
@@ -290,7 +308,7 @@ function ApproveDialog({ lead, onClose, onConfirm }: { lead: LeadDetail; onClose
   );
 }
 
-function RejectDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: (motivo: string) => void }) {
+export function RejectDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: (motivo: string) => void }) {
   const [motivo, setMotivo] = useState('');
   const reasons = ['Score baixo', 'Sem entrada', 'Documentação incompleta', 'Desistiu', 'Sem contato'];
   return (

@@ -7,6 +7,7 @@ const express = (await import('express')).default;
 const { sessionMiddleware } = await import('../server/auth.ts');
 const { api } = await import('../server/routes.ts');
 const { webhookSecret } = await import('../server/settings.ts');
+const { dayKey } = await import('../shared/dates.ts');
 
 let server: Server;
 let base = '';
@@ -82,7 +83,7 @@ test('aprovar registra venda e aparece nos indicadores', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.data.lead.vendeu, true);
   assert.ok(r.data.lead.sale_date);
-  await call('POST', '/investments', { date: new Date().toISOString().slice(0, 10), amount: 300, channel: 'Meta Ads' });
+  await call('POST', '/investments', { date: dayKey(), amount: 300, channel: 'Meta Ads' });
   const a = (await call('GET', '/analytics?period=today')).data;
   assert.equal(a.leads.value, 1);
   assert.equal(a.sales.value, 1);
@@ -112,6 +113,20 @@ test('filtro de CPF separa leads com e sem CPF', async () => {
   assert.ok(sem.items.every((l: any) => !l.cpf || !l.cpf_valid));
   assert.equal(com.total + sem.total, (await call('GET', '/leads')).data.total);
   await call('DELETE', `/leads/${extra.id}`);
+});
+
+test('veículo de interesse e criativo são salvos e aparecem no relatório', async () => {
+  const r = await call('PATCH', '/leads/5_77', { veiculo: 'Onix 2022', criativo: 'Reels Onix Black Friday' });
+  assert.equal(r.data.lead.veiculo, 'Onix 2022');
+  assert.equal(r.data.lead.criativo, 'Reels Onix Black Friday');
+  const rep = (await call('GET', '/reports?period=today')).data;
+  assert.equal(rep.creatives[0].name, 'Reels Onix Black Friday');
+  assert.equal(rep.creatives[0].sales, 1);
+  assert.equal(rep.vehicles[0].name, 'Onix 2022');
+  const busca = (await call('GET', '/leads?search=onix')).data;
+  assert.equal(busca.items[0].id, '5_77');
+  const facets = (await call('GET', '/leads/facets')).data;
+  assert.deepEqual(facets.criativos, ['Reels Onix Black Friday']);
 });
 
 test('operador não acessa usuários nem investimentos', async () => {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Megaphone, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api.ts';
+import { dayKey } from '../../shared/dates.ts';
 import { useAsync } from '../lib/hooks.ts';
 import { money, moneyShort, monthLabel, ratio } from '../lib/format.ts';
 import { Button, Card, Dialog, Empty, ErrorNote, Field, IconButton, Input, PageHeader, Skeleton, Tag, useToast, cx } from '../components/ui.tsx';
@@ -125,7 +126,7 @@ function Bar({ value, max, color, label }: { value: number; max: number; color: 
 
 function InvestmentDialog({ initial, onClose, onSaved }: { initial: Investment | null; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
-  const [date, setDate] = useState(initial?.date ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(initial?.date ?? dayKey());
   const [amount, setAmount] = useState(initial ? String(initial.amount).replace('.', ',') : '');
   const [channel, setChannel] = useState(initial?.channel ?? 'Meta Ads');
   const [notes, setNotes] = useState(initial?.notes ?? '');

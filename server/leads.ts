@@ -49,6 +49,8 @@ function toLead(r: Row): Lead {
     sale_date: (r.sale_date as string) ?? null,
     observacao: (r.observacao as string) ?? null,
     motivo_reprovacao: (r.motivo_reprovacao as string) ?? null,
+    veiculo: (r.veiculo as string) ?? null,
+    criativo: (r.criativo as string) ?? null,
     chatwoot_url: (r.chatwoot_url as string) ?? null,
     channel: r.channel as Channel,
     inbox_id: r.inbox_id == null ? null : Number(r.inbox_id),
@@ -66,7 +68,7 @@ function toLead(r: Row): Lead {
 const COLUMNS = [
   'id', 'account_id', 'contact_id', 'conversation_id', 'contact_name', 'contact_phone', 'contact_email',
   'entry_date', 'last_interaction_at', 'cpf', 'cpf_valid', 'birth_date', 'cnh', 'status', 'vendedor', 'loja',
-  'vendeu', 'valor_venda', 'sale_date', 'observacao', 'motivo_reprovacao', 'chatwoot_url', 'channel',
+  'vendeu', 'valor_venda', 'sale_date', 'observacao', 'motivo_reprovacao', 'veiculo', 'criativo', 'chatwoot_url', 'channel',
   'inbox_id', 'inbox_name', 'tags', 'last_message', 'manual_fields', 'field_origins', 'cpf_conflict',
   'recent_messages', 'created_at', 'updated_at',
 ] as const;
@@ -180,6 +182,8 @@ export function upsertFromChatwoot(input: ChatwootLeadInput): { lead: LeadDetail
       sale_date: existing?.sale_date ?? null,
       observacao: existing?.observacao ?? null,
       motivo_reprovacao: existing?.motivo_reprovacao ?? null,
+      veiculo: existing?.veiculo ?? null,
+      criativo: existing?.criativo ?? null,
       chatwoot_url: input.chatwoot_url ?? existing?.chatwoot_url ?? null,
       channel: input.channel,
       inbox_id: input.inbox_id ?? existing?.inbox_id ?? null,
@@ -212,6 +216,8 @@ export interface LeadPatch {
   valor_venda?: number;
   observacao?: string | null;
   motivo_reprovacao?: string | null;
+  veiculo?: string | null;
+  criativo?: string | null;
 }
 
 const MANUAL_TRACKED = ['contact_name', 'contact_phone', 'contact_email', 'cpf', 'birth_date', 'cnh'] as const;
@@ -303,6 +309,8 @@ export function createManualLead(input: {
   channel: Channel;
   inbox_id?: number | null;
   inbox_name?: string | null;
+  veiculo?: string;
+  criativo?: string;
 }): LeadDetail {
   const now = nowIso();
   const lead: LeadDetail = {
@@ -327,6 +335,8 @@ export function createManualLead(input: {
     sale_date: null,
     observacao: null,
     motivo_reprovacao: null,
+    veiculo: input.veiculo?.trim() || null,
+    criativo: input.criativo?.trim() || null,
     chatwoot_url: null,
     channel: input.channel,
     inbox_id: input.inbox_id ?? null,
@@ -387,8 +397,8 @@ function buildWhere(q: LeadQuery): { sql: string; params: (string | number)[] } 
   if (q.search?.trim()) {
     const s = q.search.trim();
     const digits = s.replace(/\D/g, '');
-    const clauses = ['contact_name LIKE ?', 'contact_email LIKE ?', 'vendedor LIKE ?'];
-    params.push(`%${s}%`, `%${s}%`, `%${s}%`);
+    const clauses = ['contact_name LIKE ?', 'contact_email LIKE ?', 'vendedor LIKE ?', 'veiculo LIKE ?', 'criativo LIKE ?'];
+    params.push(`%${s}%`, `%${s}%`, `%${s}%`, `%${s}%`, `%${s}%`);
     if (digits.length >= 3) {
       clauses.push("REPLACE(REPLACE(REPLACE(REPLACE(contact_phone,'+',''),' ',''),'-',''),'(','') LIKE ?");
       clauses.push("REPLACE(REPLACE(cpf,'.',''),'-','') LIKE ?");
@@ -419,10 +429,10 @@ export function allLeadsFor(q: LeadQuery): Lead[] {
   return (db.prepare(`SELECT * FROM leads ${sql} ORDER BY entry_date DESC`).all(...params) as Row[]).map(toLead);
 }
 
-export function leadFacets(): { vendedores: string[]; lojas: string[] } {
+export function leadFacets(): { vendedores: string[]; lojas: string[]; veiculos: string[]; criativos: string[] } {
   const pick = (col: string) =>
     (db.prepare(`SELECT DISTINCT ${col} AS v FROM leads WHERE ${col} IS NOT NULL AND ${col} != '' ORDER BY 1`).all() as {
       v: string;
     }[]).map((r) => r.v);
-  return { vendedores: pick('vendedor'), lojas: pick('loja') };
+  return { vendedores: pick('vendedor'), lojas: pick('loja'), veiculos: pick('veiculo'), criativos: pick('criativo') };
 }
