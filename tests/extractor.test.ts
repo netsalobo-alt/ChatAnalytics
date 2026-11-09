@@ -85,3 +85,56 @@ test('Datas: dia local de Belém (UTC−3) e períodos', () => {
   assert.deepEqual(previousRange({ start: '2026-11-01', end: '2026-11-08' }), { start: '2026-10-24', end: '2026-10-31' });
   assert.equal(addDays('2026-12-31', 1), '2027-01-01');
 });
+
+import { parseAdMessage, defaultAdLabel } from '../shared/adParser.ts';
+
+const AD_MSG = `📢 **ANÚNCIO DO FACEBOOK**
+
+**Título:** Converse conosco
+
+**Descrição:**
+Somos a rede que mais aprova financiamentos no Brasil. Venha realizar o sonho da moto 0km!
+
+**Link do Anúncio:** [Ver no Facebook](https://fb.me/7XhphMdSv)
+**ID do Anúncio:** 120212345678901234
+
+---
+💬 **MENSAGEM DO CLIENTE:**
+Olá! Preenchi seu formulário e gostaria de saber mais sobre sua empresa.
+
+Phone number: +5591988887777
+CPF: 52998224725
+Date of birth: 03/25/1974
+Tem nome limpo?: Sim
+Possui CNH de moto?: Não
+Full name: Cliente Exemplo`;
+
+test('Anúncio: lê plataforma, ID, título, descrição, link e a mensagem do cliente', () => {
+  const r = parseAdMessage(AD_MSG)!;
+  assert.equal(r.ad.platform, 'Facebook');
+  assert.equal(r.ad.id, '120212345678901234');
+  assert.equal(r.ad.title, 'Converse conosco');
+  assert.equal(r.ad.description, 'Somos a rede que mais aprova financiamentos no Brasil. Venha realizar o sonho da moto 0km!');
+  assert.equal(r.ad.link, 'https://fb.me/7XhphMdSv');
+  assert.match(r.clientText, /^Olá! Preenchi seu formulário/);
+  assert.doesNotMatch(r.clientText, /ANÚNCIO|ID do Anúncio/);
+  assert.equal(parseAdMessage('Bom dia, quero uma moto'), null);
+  assert.match(defaultAdLabel(r.ad), /^Somos a rede que mais aprova financiamentos no… #1234$/);
+});
+
+test('Anúncio: aceita Instagram e mensagem sem bloco do cliente', () => {
+  const r = parseAdMessage('📢 **ANÚNCIO DO INSTAGRAM**\n\n**Título:** Moto 0km\n\n**ID do Anúncio:** 555')!;
+  assert.equal(r.ad.platform, 'Instagram');
+  assert.equal(r.ad.id, '555');
+  assert.equal(r.ad.description, null);
+  assert.equal(r.clientText, '');
+});
+
+test('Formulário da Meta: CPF, data mês/dia/ano e CNH como pergunta', () => {
+  const r = extractClientData([msg(parseAdMessage(AD_MSG)!.clientText)], {}, { now: NOW });
+  assert.equal(r.cpf, '529.982.247-25');
+  assert.equal(r.birth_date, '25/03/1974');
+  assert.equal(r.cnh, 'NÃO');
+  assert.equal(extractCNH('Possui CNH?: Sim'), 'SIM');
+  assert.equal(extractBirthDate('Date of birth: 02/30/1990', new Date(NOW))?.valid, false);
+});

@@ -108,6 +108,25 @@ const MIGRATIONS: string[] = [
   ALTER TABLE leads ADD COLUMN criativo TEXT;
   CREATE INDEX leads_criativo ON leads(criativo);
   `,
+  `
+  ALTER TABLE leads ADD COLUMN ad_id TEXT;
+  ALTER TABLE leads ADD COLUMN ad_platform TEXT;
+  ALTER TABLE leads ADD COLUMN ad_link TEXT;
+  ALTER TABLE leads ADD COLUMN ad_description TEXT;
+  ALTER TABLE leads ADD COLUMN ad_image TEXT;
+  CREATE INDEX leads_ad ON leads(ad_id);
+  CREATE TABLE ads (
+    id TEXT PRIMARY KEY,
+    platform TEXT,
+    title TEXT,
+    description TEXT,
+    link TEXT,
+    image_url TEXT,
+    name TEXT,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL
+  );
+  `,
 ];
 
 function migrate() {

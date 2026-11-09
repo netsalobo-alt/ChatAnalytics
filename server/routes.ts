@@ -10,9 +10,10 @@ import {
 import { db } from './db.ts';
 import { computeAnalytics } from './analytics.ts';
 import { computeReport } from './reports.ts';
+import { leadsWithoutAd, listAds, renameAd } from './ads.ts';
 import { exportBackup, importBackup } from './backup.ts';
 import {
-  ChatwootError, applyLabels, handleWebhook, isSyncing, labelsForStatus, refreshInboxes, rescanLead, syncConversations,
+  ChatwootError, applyLabels, backfillStatus, handleWebhook, startBackfill, isSyncing, labelsForStatus, refreshInboxes, rescanLead, syncConversations,
   testConnection,
 } from './chatwoot.ts';
 import {
@@ -191,7 +192,7 @@ api.get('/leads/export.csv', requireRole('manager'), (req, res) => {
     ['Nome', 'contact_name'], ['Telefone', 'contact_phone'], ['E-mail', 'contact_email'], ['Entrada', 'entry_date'],
     ['Canal', 'channel'], ['Caixa', 'inbox_name'], ['Status', 'status'], ['CPF', 'cpf'], ['Nascimento', 'birth_date'],
     ['CNH', 'cnh'], ['Vendedor', 'vendedor'], ['Loja', 'loja'], ['Vendeu', 'vendeu'], ['Valor', 'valor_venda'],
-    ['Data da venda', 'sale_date'], ['Motivo reprovação', 'motivo_reprovacao'], ['Veículo de interesse', 'veiculo'], ['Criativo', 'criativo'], ['Observação', 'observacao'],
+    ['Data da venda', 'sale_date'], ['Motivo reprovação', 'motivo_reprovacao'], ['Veículo de interesse', 'veiculo'], ['Criativo', 'criativo'], ['ID do anúncio', 'ad_id'], ['Observação', 'observacao'],
     ['Conversa', 'chatwoot_url'],
   ] as const;
   const esc = (v: unknown) => {
@@ -274,6 +275,31 @@ api.delete('/leads/:id', requireRole('manager'), (req, res) => {
   if (!deleteLead(String(req.params.id))) return fail(res, 404, 'Lead não encontrado.');
   broadcast('lead', { id: String(req.params.id), deleted: true });
   res.json({ ok: true });
+});
+
+// ---------- Anúncios (criativos) ----------
+
+api.get('/ads', requireRole('manager'), (req, res) => {
+  const f = parseFilter(req.query);
+  res.json({ ads: listAds(f), without_ad: leadsWithoutAd(f), backfill: backfillStatus() });
+});
+
+api.get('/ads/backfill', requireRole('manager'), (_req, res) => res.json(backfillStatus()));
+
+api.post('/ads/backfill', requireRole('manager'), (req, res) => {
+  const days = Math.min(365, Math.max(1, Math.round(Number(req.body?.days) || 90)));
+  try {
+    res.json(startBackfill(days));
+  } catch (err) {
+    chatwootFail(res, err);
+  }
+});
+
+api.patch('/ads/:id', requireRole('manager'), (req, res) => {
+  const ad = renameAd(String(req.params.id), str(req.body?.name) ?? null);
+  if (!ad) return fail(res, 404, 'Anúncio não encontrado.');
+  broadcast('sync', { ad: ad.id });
+  res.json(ad);
 });
 
 // ---------- Caixas de entrada ----------

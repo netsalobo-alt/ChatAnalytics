@@ -65,6 +65,11 @@ export interface Lead {
   motivo_reprovacao: string | null;
   veiculo: string | null; // modelo do veículo de interesse
   criativo: string | null; // anúncio/criativo de origem (tráfego pago)
+  ad_id: string | null; // ID do anúncio da Meta (capturado da conversa)
+  ad_platform: string | null;
+  ad_link: string | null;
+  ad_description: string | null;
+  ad_image: string | null;
   chatwoot_url: string | null;
   channel: Channel;
   inbox_id: number | null;
@@ -232,4 +237,32 @@ export interface Report {
   vehicles: ReportGroup[];
   rejections: { reason: string; count: number }[];
   quality: { total: number; cpf: number; birth: number; cnh: number; conflicts: number };
+}
+
+export interface Ad {
+  id: string;
+  platform: string | null;
+  title: string | null;
+  description: string | null;
+  link: string | null;
+  image_url: string | null;
+  name: string | null; // nome amigável dado pela equipe
+  label: string; // nome exibido (amigável ou gerado)
+  first_seen: string;
+  last_seen: string; // entrada do lead mais recente vindo deste anúncio
+  leads: number;
+  sales: number;
+  revenue: number;
+  conversion: number;
+}
+
+export interface BackfillStatus {
+  running: boolean;
+  total: number;
+  done: number;
+  found: number;
+  errors: number;
+  started_at: string | null;
+  finished_at: string | null;
+  message: string | null;
 }

@@ -4,7 +4,9 @@ import { getSettings, setSettings, chatwootReady, parseLabels, type SettingsShap
 import { claimMessage, getInbox, inboxLabel, logWebhook, saveRemoteInboxes } from './store.ts';
 import { broadcast } from './events.ts';
 import { applyRescan, getLead, upsertFromChatwoot } from './leads.ts';
-import type { Channel, ClientMessage, Lead } from '../shared/types.ts';
+import type { BackfillStatus, Channel, ClientMessage, Lead } from '../shared/types.ts';
+import { parseAdMessage, type AdInfo } from '../shared/adParser.ts';
+import { db } from './db.ts';
 
 type Json = Record<string, any>;
 
@@ -75,9 +77,26 @@ function clientMessages(list: Json[]): ClientMessage[] {
     const incoming = m.message_type === 0 || m.message_type === 'incoming';
     const senderType = String(m.sender_type || m.sender?.type || '').toLowerCase();
     if (!incoming && senderType !== 'contact') continue;
-    out.push({ text, timestamp: toEpochMs(m.created_at) ?? Date.now(), message_id: m.id });
+    // Mensagem de anúncio: só a parte escrita pelo cliente entra na extração de dados.
+    const ad = parseAdMessage(text);
+    const clientText = ad ? ad.clientText : text;
+    if (!clientText) continue;
+    out.push({ text: clientText, timestamp: toEpochMs(m.created_at) ?? Date.now(), message_id: m.id });
   }
   return out;
+}
+
+/** Primeiro anúncio encontrado nas mensagens (ordem cronológica), com a imagem anexada. */
+function findAd(list: Json[]): (AdInfo & { image: string | null }) | null {
+  const sorted = [...list].sort((a, b) => (toEpochMs(a.created_at) ?? 0) - (toEpochMs(b.created_at) ?? 0));
+  for (const m of sorted) {
+    if (m.private || typeof m.content !== 'string') continue;
+    const parsed = parseAdMessage(m.content);
+    if (!parsed?.ad.id) continue;
+    const img = (m.attachments ?? []).find((a: Json) => a?.file_type === 'image');
+    return { ...parsed.ad, image: img?.data_url ?? img?.thumb_url ?? null };
+  }
+  return null;
 }
 
 function conversationUrl(s: SettingsShape, conversationId: number) {
@@ -177,6 +196,7 @@ function ingestConversation(s: SettingsShape, conv: Json): boolean {
     last_interaction_at: new Date(activity).toISOString(),
     chatwoot_url: conversationUrl(s, Number(conv.id)),
     messages: clientMessages(conv.messages ?? []),
+    ad: findAd(conv.messages ?? []),
   });
   return isNew;
 }
@@ -187,6 +207,7 @@ export async function rescanLead(id: string) {
   const lead = getLead(id);
   if (!lead) return null;
   let messages: ClientMessage[] = [];
+  let ad: ReturnType<typeof findAd> = null;
   if (chatwootReady(s) && lead.conversation_id) {
     const all: Json[] = [];
     let before: number | undefined;
@@ -201,8 +222,9 @@ export async function rescanLead(id: string) {
       if (batch.length < 20) break;
     }
     messages = clientMessages(all);
+    ad = findAd(all);
   }
-  return applyRescan(id, messages);
+  return applyRescan(id, messages, ad);
 }
 
 /** Acrescenta/remove etiquetas na conversa sem apagar as demais. */
@@ -259,6 +281,7 @@ export function handleWebhook(body: Json): { status: 'processed' | 'ignored'; su
   const created = toEpochMs(conv.created_at) ?? Date.now();
   const at = toEpochMs(isMessage ? body.created_at : conv.last_activity_at ?? conv.timestamp) ?? Date.now();
   const messages = isMessage ? clientMessages([body]) : clientMessages(conv.messages ?? []);
+  const ad = isMessage ? findAd([body]) : findAd(conv.messages ?? []);
   const accountId = String(body.account?.id ?? conv.account_id ?? s.account_id ?? '');
 
   const { lead, isNew, found } = upsertFromChatwoot({
@@ -276,10 +299,61 @@ export function handleWebhook(body: Json): { status: 'processed' | 'ignored'; su
     last_interaction_at: new Date(at).toISOString(),
     chatwoot_url: conversationUrl({ ...s, account_id: accountId }, conversationId),
     messages,
+    ad,
   });
 
   const parts = [isNew ? 'Novo lead criado' : 'Lead atualizado'];
   if (found.length) parts.push(`${found.join(', ')} identificado`);
   if (lead.cpf_conflict) parts.push('conflito de CPF');
   return log('processed', parts.join(' · '), lead.id);
+}
+
+// ---------- Reprocessar leads antigos (anúncio + dados do cliente) ----------
+
+const backfill: BackfillStatus = {
+  running: false, total: 0, done: 0, found: 0, errors: 0, started_at: null, finished_at: null, message: null,
+};
+export const backfillStatus = () => ({ ...backfill });
+
+/**
+ * Relê o histórico das conversas dos leads sem anúncio identificado (últimos `days` dias)
+ * para preencher o anúncio de origem e completar CPF, nascimento e CNH. Roda em segundo plano.
+ */
+export function startBackfill(days = 90): BackfillStatus {
+  if (backfill.running) return backfillStatus();
+  if (!chatwootReady()) throw new ChatwootError('Configure a conexão com o Chatwoot primeiro.');
+  const since = new Date(Date.now() - days * 86400_000).toISOString();
+  const ids = (db
+    .prepare(
+      `SELECT id FROM leads WHERE ad_id IS NULL AND conversation_id > 0 AND entry_date >= ?
+       ORDER BY entry_date DESC`,
+    )
+    .all(since) as { id: string }[]).map((r) => r.id);
+
+  Object.assign(backfill, {
+    running: true, total: ids.length, done: 0, found: 0, errors: 0,
+    started_at: new Date().toISOString(), finished_at: null, message: null,
+  });
+  broadcast('backfill', backfillStatus());
+
+  (async () => {
+    for (const id of ids) {
+      try {
+        const r = await rescanLead(id);
+        if (r?.found.includes('anúncio')) backfill.found++;
+      } catch {
+        backfill.errors++;
+      }
+      backfill.done++;
+      if (backfill.done % 10 === 0) broadcast('backfill', backfillStatus());
+      await new Promise((res) => setTimeout(res, 150)); // não sobrecarrega o Chatwoot
+    }
+    backfill.running = false;
+    backfill.finished_at = new Date().toISOString();
+    backfill.message = `${backfill.done} conversas relidas, ${backfill.found} vindas de anúncio.`;
+    broadcast('backfill', backfillStatus());
+    broadcast('sync', { backfill: true });
+  })();
+
+  return backfillStatus();
 }

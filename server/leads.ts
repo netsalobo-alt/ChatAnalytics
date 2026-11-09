@@ -3,6 +3,8 @@
 import crypto from 'node:crypto';
 import { db, nowIso, transaction } from './db.ts';
 import { extractClientData } from '../shared/extractor.ts';
+import type { AdInfo } from '../shared/adParser.ts';
+import { upsertAd } from './ads.ts';
 import { cleanCPF, formatCPF, validateCPF } from '../shared/cpf.ts';
 import { rangeForPeriod, rangeToIso } from '../shared/dates.ts';
 import {
@@ -51,6 +53,11 @@ function toLead(r: Row): Lead {
     motivo_reprovacao: (r.motivo_reprovacao as string) ?? null,
     veiculo: (r.veiculo as string) ?? null,
     criativo: (r.criativo as string) ?? null,
+    ad_id: (r.ad_id as string) ?? null,
+    ad_platform: (r.ad_platform as string) ?? null,
+    ad_link: (r.ad_link as string) ?? null,
+    ad_description: (r.ad_description as string) ?? null,
+    ad_image: (r.ad_image as string) ?? null,
     chatwoot_url: (r.chatwoot_url as string) ?? null,
     channel: r.channel as Channel,
     inbox_id: r.inbox_id == null ? null : Number(r.inbox_id),
@@ -68,7 +75,7 @@ function toLead(r: Row): Lead {
 const COLUMNS = [
   'id', 'account_id', 'contact_id', 'conversation_id', 'contact_name', 'contact_phone', 'contact_email',
   'entry_date', 'last_interaction_at', 'cpf', 'cpf_valid', 'birth_date', 'cnh', 'status', 'vendedor', 'loja',
-  'vendeu', 'valor_venda', 'sale_date', 'observacao', 'motivo_reprovacao', 'veiculo', 'criativo', 'chatwoot_url', 'channel',
+  'vendeu', 'valor_venda', 'sale_date', 'observacao', 'motivo_reprovacao', 'veiculo', 'criativo', 'ad_id', 'ad_platform', 'ad_link', 'ad_description', 'ad_image', 'chatwoot_url', 'channel',
   'inbox_id', 'inbox_name', 'tags', 'last_message', 'manual_fields', 'field_origins', 'cpf_conflict',
   'recent_messages', 'created_at', 'updated_at',
 ] as const;
@@ -114,6 +121,25 @@ export interface ChatwootLeadInput {
   messages?: ClientMessage[];
   /** Janela da extração. Padrão 10 min (webhook); Infinity para reanálise do histórico. */
   extract_window_ms?: number;
+  /** Anúncio identificado na conversa (mensagem "📢 ANÚNCIO DO …"). */
+  ad?: (AdInfo & { image?: string | null }) | null;
+}
+
+/**
+ * Aplica o anúncio ao lead: guarda o primeiro anúncio (primeiro toque) e, se o criativo
+ * não foi digitado à mão, usa o nome do anúncio como criativo.
+ */
+function applyAd(lead: LeadDetail, ad: ChatwootLeadInput['ad']): boolean {
+  if (!ad?.id) return false;
+  const label = upsertAd(ad);
+  if (lead.ad_id) return false;
+  lead.ad_id = ad.id;
+  lead.ad_platform = ad.platform;
+  lead.ad_link = ad.link;
+  lead.ad_description = ad.description;
+  lead.ad_image = ad.image ?? null;
+  if (!lead.manual_fields.includes('criativo') && label) lead.criativo = label;
+  return true;
 }
 
 function mergeMessages(current: ClientMessage[], incoming: ClientMessage[]): ClientMessage[] {
@@ -184,6 +210,11 @@ export function upsertFromChatwoot(input: ChatwootLeadInput): { lead: LeadDetail
       motivo_reprovacao: existing?.motivo_reprovacao ?? null,
       veiculo: existing?.veiculo ?? null,
       criativo: existing?.criativo ?? null,
+      ad_id: existing?.ad_id ?? null,
+      ad_platform: existing?.ad_platform ?? null,
+      ad_link: existing?.ad_link ?? null,
+      ad_description: existing?.ad_description ?? null,
+      ad_image: existing?.ad_image ?? null,
       chatwoot_url: input.chatwoot_url ?? existing?.chatwoot_url ?? null,
       channel: input.channel,
       inbox_id: input.inbox_id ?? existing?.inbox_id ?? null,
@@ -195,6 +226,7 @@ export function upsertFromChatwoot(input: ChatwootLeadInput): { lead: LeadDetail
       created_at: existing?.created_at ?? now,
       updated_at: now,
     };
+    if (applyAd(lead, input.ad)) found.push('anúncio');
     writeRow(lead);
     return { lead, isNew: !existing, found };
   });
@@ -220,7 +252,7 @@ export interface LeadPatch {
   criativo?: string | null;
 }
 
-const MANUAL_TRACKED = ['contact_name', 'contact_phone', 'contact_email', 'cpf', 'birth_date', 'cnh'] as const;
+const MANUAL_TRACKED = ['contact_name', 'contact_phone', 'contact_email', 'cpf', 'birth_date', 'cnh', 'criativo'] as const;
 
 export function validatePatch(p: Record<string, unknown>): string | null {
   if (p.status !== undefined && !LEAD_STATUSES.includes(p.status as LeadStatus)) return 'Status inválido.';
@@ -281,7 +313,7 @@ export function updateLead(id: string, patch: LeadPatch): LeadDetail | null {
 }
 
 /** Grava o resultado de uma reanálise do histórico da conversa. */
-export function applyRescan(id: string, messages: ClientMessage[]): { lead: LeadDetail; found: string[] } | null {
+export function applyRescan(id: string, messages: ClientMessage[], ad?: ChatwootLeadInput['ad']): { lead: LeadDetail; found: string[] } | null {
   const lead = getLead(id);
   if (!lead) return null;
   const merged = mergeMessages(lead.recent_messages, messages);
@@ -297,6 +329,7 @@ export function applyRescan(id: string, messages: ClientMessage[]): { lead: Lead
     recent_messages: merged,
     updated_at: nowIso(),
   };
+  if (applyAd(next, ad)) found.push('anúncio');
   writeRow(next);
   return { lead: next, found };
 }
@@ -337,13 +370,18 @@ export function createManualLead(input: {
     motivo_reprovacao: null,
     veiculo: input.veiculo?.trim() || null,
     criativo: input.criativo?.trim() || null,
+    ad_id: null,
+    ad_platform: null,
+    ad_link: null,
+    ad_description: null,
+    ad_image: null,
     chatwoot_url: null,
     channel: input.channel,
     inbox_id: input.inbox_id ?? null,
     inbox_name: input.inbox_name ?? null,
     tags: [],
     last_message: null,
-    manual_fields: ['contact_name', 'contact_phone', 'contact_email'],
+    manual_fields: ['contact_name', 'contact_phone', 'contact_email', ...(input.criativo?.trim() ? ['criativo'] : [])],
     field_origins: {},
     cpf_conflict: null,
     recent_messages: [],

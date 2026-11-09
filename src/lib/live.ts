@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-export type LiveEvent = 'lead' | 'sync' | 'webhook';
+export type LiveEvent = 'lead' | 'sync' | 'webhook' | 'backfill';
 type Handler = (type: LiveEvent, data: Record<string, unknown>) => void;
 
 let source: EventSource | null = null;
@@ -22,7 +22,7 @@ function ensure() {
   source.onopen = () => setConnected(true);
   // O navegador reconecta sozinho; só marcamos como desconectado enquanto isso.
   source.onerror = () => setConnected(false);
-  for (const type of ['lead', 'sync', 'webhook'] as LiveEvent[]) {
+  for (const type of ['lead', 'sync', 'webhook', 'backfill'] as LiveEvent[]) {
     source.addEventListener(type, (e) => {
       let data: Record<string, unknown> = {};
       try {

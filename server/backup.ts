@@ -17,6 +17,7 @@ export interface BackupV3 {
   inboxes: Inbox[];
   leads: LeadDetail[];
   investments: Investment[];
+  ads?: Json[];
 }
 
 export function exportBackup(): BackupV3 {
@@ -30,6 +31,7 @@ export function exportBackup(): BackupV3 {
     inboxes: listInboxes(),
     leads: ids.map((id) => getLead(id)!).filter(Boolean),
     investments: listInvestments(),
+    ads: db.prepare('SELECT * FROM ads').all() as Json[],
   };
 }
 
@@ -104,6 +106,11 @@ function normalizeLead(raw: Json): LeadDetail | null {
     motivo_reprovacao: str(raw.motivo_reprovacao),
     veiculo: str(raw.veiculo),
     criativo: str(raw.criativo),
+    ad_id: str(raw.ad_id),
+    ad_platform: str(raw.ad_platform),
+    ad_link: str(raw.ad_link),
+    ad_description: str(raw.ad_description),
+    ad_image: str(raw.ad_image),
     chatwoot_url: str(raw.chatwoot_url),
     channel: CHANNELS.includes(raw.channel) ? (raw.channel as Channel) : 'Outros',
     inbox_id: raw.inbox_id == null ? null : Number(raw.inbox_id) || null,
@@ -144,7 +151,19 @@ export function importBackup(data: Json, mode: 'merge' | 'replace'): ImportResul
   const rawInboxes: Json[] = isV3 ? data.inboxes ?? [] : data.config?.inboxes ?? [];
 
   return transaction(() => {
-    if (mode === 'replace') db.exec('DELETE FROM leads; DELETE FROM investments; DELETE FROM inboxes;');
+    if (mode === 'replace') db.exec('DELETE FROM leads; DELETE FROM investments; DELETE FROM inboxes; DELETE FROM ads;');
+
+    const adStmt = db.prepare(
+      `INSERT INTO ads (id, platform, title, description, link, image_url, name, first_seen, last_seen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name = COALESCE(excluded.name, name),
+         description = COALESCE(excluded.description, description), image_url = COALESCE(excluded.image_url, image_url)`,
+    );
+    for (const a of isV3 && Array.isArray(data.ads) ? data.ads : []) {
+      if (!str(a?.id)) continue;
+      adStmt.run(String(a.id), str(a.platform), str(a.title), str(a.description), str(a.link), str(a.image_url), str(a.name),
+        iso(a.first_seen, nowIso()), iso(a.last_seen, nowIso()));
+    }
 
     let inboxes = 0;
     const ibStmt = db.prepare(

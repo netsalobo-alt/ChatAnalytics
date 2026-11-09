@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
-import { BarChart3, Cable, FileText, LogOut, Megaphone, Rows3, Users, Waypoints } from 'lucide-react';
+import { BarChart3, Cable, FileText, LogOut, Megaphone, Rows3, Sparkles, Users, Waypoints } from 'lucide-react';
 import { api, setUnauthorizedHandler } from './lib/api.ts';
 import { useHashRoute } from './lib/hooks.ts';
 import { closeLive, useLiveStatus } from './lib/live.ts';
@@ -14,6 +14,7 @@ import Investments from './views/Investments.tsx';
 import UsersView from './views/Users.tsx';
 import Integration from './views/Integration.tsx';
 import Reports from './views/Reports.tsx';
+import Creatives from './views/Creatives.tsx';
 
 interface NavItem {
   id: string;
@@ -28,6 +29,7 @@ const NAV: NavItem[] = [
   { id: 'painel', label: 'Painel', icon: BarChart3, min: 'operator', view: Dashboard },
   { id: 'leads', label: 'Leads', icon: Rows3, min: 'operator', view: Leads },
   { id: 'canais', label: 'Canais', icon: Waypoints, min: 'operator', view: Channels },
+  { id: 'criativos', label: 'Criativos', icon: Sparkles, min: 'manager', view: Creatives },
   { id: 'investimentos', label: 'Investimentos', short: 'Invest.', icon: Megaphone, min: 'manager', view: Investments },
   { id: 'relatorios', label: 'Relatórios', short: 'Relatór.', icon: FileText, min: 'manager', view: Reports },
   { id: 'usuarios', label: 'Usuários', icon: Users, min: 'admin', view: UsersView },
@@ -156,11 +158,11 @@ function Shell() {
       </main>
 
       {/* Barra de abas (celular) */}
-      <nav className="no-print fixed inset-x-0 bottom-0 z-30 flex border-t border-separator bg-[var(--sidebar)] pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl lg:hidden" aria-label="Principal">
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-separator bg-[var(--sidebar)] pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl lg:hidden" aria-label="Principal">
         {items.map((n) => {
           const active = n.id === current.id;
           return (
-            <button key={n.id} onClick={() => go(n.id)} className={cx('flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium', active ? 'text-accent' : 'text-label-3')}>
+            <button key={n.id} onClick={() => go(n.id)} className={cx('flex min-w-[64px] flex-1 shrink-0 flex-col items-center gap-0.5 py-2 text-[10px] font-medium', active ? 'text-accent' : 'text-label-3')}>
               <n.icon className="size-[22px]" strokeWidth={active ? 2.2 : 1.8} />
               {n.short ?? n.label}
             </button>

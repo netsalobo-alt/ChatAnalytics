@@ -59,6 +59,16 @@ export interface BirthMatch {
 export function extractBirthDate(text: string, ref = new Date()): BirthMatch | null {
   if (!text) return null;
   const normalized = normalizeText(text);
+
+  // Formulário instantâneo da Meta em inglês: "Date of birth: 03/25/1974" (mês/dia/ano).
+  const us = text.match(/date of birth\s*:?\s*(0?[1-9]|1[0-2])[/.-](0?[1-9]|[12]\d|3[01])[/.-]((?:19|20)\d{2})/i);
+  if (us) {
+    const month = +us[1], day = +us[2], year = +us[3];
+    if (!isValidCalendarDate(day, month, year)) return { valid: false, reason: 'Data inexistente no calendário' };
+    const age = calculateAge(day, month, year, ref);
+    if (age < 14 || age > 100) return { valid: false, age, reason: `Idade ${age} fora do intervalo 14–100` };
+    return { valid: true, age, formatted: `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}` };
+  }
   const hasContext = BIRTH_CONTEXT.some((w) =>
     new RegExp(`(?:^|\\W)${w.replace(/[./]/g, '\\$&')}(?:\\W|$)`).test(normalized),
   );
@@ -107,6 +117,9 @@ const CNH_YES = [
 export function extractCNH(text: string): 'SIM' | 'NÃO' | null {
   if (!text) return null;
   const n = normalizeText(text);
+  // Pergunta e resposta de formulário: "Possui CNH de moto?: Não", "Tem habilitação: sim".
+  const qa = n.match(/(?:cnh|habilitacao|carteira de motorista)[^\n:?]*\??\s*:\s*(sim|nao)\b/);
+  if (qa) return qa[1] === 'sim' ? 'SIM' : 'NÃO';
   if (CNH_NO.some((e) => n.includes(e))) return 'NÃO';
   if (CNH_YES.some((e) => n.includes(e))) return 'SIM';
   return null;

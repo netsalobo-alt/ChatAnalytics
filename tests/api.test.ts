@@ -239,3 +239,48 @@ test('eventos ao vivo avisam quando chega um lead pelo webhook', async () => {
 test('eventos ao vivo exigem login', async () => {
   assert.equal((await call('GET', '/events', undefined, '')).status, 401);
 });
+
+const adWebhook = (id: number, contactId: number, adId: string, extra = '') => ({
+  event: 'message_created', id, message_type: 'incoming', created_at: new Date().toISOString(),
+  content: `📢 **ANÚNCIO DO FACEBOOK**\n\n**Título:** Converse conosco\n\n**Descrição:**\nSomos a rede que mais aprova financiamentos no Brasil.\n\n**Link do Anúncio:** [Ver no Facebook](https://fb.me/abc123)\n**ID do Anúncio:** ${adId}\n\n---\n💬 **MENSAGEM DO CLIENTE:**\nOlá, quero realizar uma simulação${extra}`,
+  attachments: [{ file_type: 'image', data_url: 'https://chatwoot.exemplo/anuncio.jpg' }],
+  sender: { id: contactId, name: `Cliente Anúncio ${contactId}`, type: 'contact' },
+  conversation: { id: 70000 + contactId, inbox_id: 3 }, account: { id: 5 },
+});
+
+test('anúncio do Facebook vira criativo do lead, com imagem e dados do formulário', async () => {
+  const r = await call('POST', `/webhooks/chatwoot/${webhookSecret()}`, adWebhook(990001, 501, '120200000000000001', '\nCPF: 52998224725\nPossui CNH de moto?: Sim'), '');
+  assert.match(r.data.summary, /anúncio/);
+  const lead = (await call('GET', '/leads/5_501')).data;
+  assert.equal(lead.ad_id, '120200000000000001');
+  assert.equal(lead.ad_platform, 'Facebook');
+  assert.equal(lead.ad_image, 'https://chatwoot.exemplo/anuncio.jpg');
+  assert.match(lead.criativo, /Somos a rede.*#0001/);
+  assert.equal(lead.cpf, '529.982.247-25');
+  assert.equal(lead.cnh, 'SIM');
+  assert.equal(lead.last_message, 'Olá, quero realizar uma simulação\nCPF: 52998224725\nPossui CNH de moto?: Sim');
+
+  const ads = (await call('GET', '/ads?period=all')).data;
+  const ad = ads.ads.find((a: any) => a.id === '120200000000000001');
+  assert.equal(ad.leads, 1);
+  assert.equal(ad.link, 'https://fb.me/abc123');
+});
+
+test('nome amigável do anúncio vale para os leads, mas não sobrescreve criativo manual', async () => {
+  await call('POST', `/webhooks/chatwoot/${webhookSecret()}`, adWebhook(990002, 502, '120200000000000001'), '');
+  await call('PATCH', '/leads/5_502', { criativo: 'Digitado pelo SDR' });
+  const renamed = await call('PATCH', '/ads/120200000000000001', { name: 'Moto 0km – Brasil' });
+  assert.equal(renamed.data.label, 'Moto 0km – Brasil');
+  assert.equal((await call('GET', '/leads/5_501')).data.criativo, 'Moto 0km – Brasil');
+  assert.equal((await call('GET', '/leads/5_502')).data.criativo, 'Digitado pelo SDR');
+  // Primeiro toque: outro anúncio depois não troca o anúncio do lead.
+  await call('POST', `/webhooks/chatwoot/${webhookSecret()}`, adWebhook(990003, 501, '120200000000000999'), '');
+  assert.equal((await call('GET', '/leads/5_501')).data.ad_id, '120200000000000001');
+});
+
+test('reprocessar exige Chatwoot configurado e perfil de gestor', async () => {
+  const r = await call('POST', '/ads/backfill', { days: 30 });
+  assert.equal(r.status, 502);
+  const login = await call('POST', '/auth/login', { email: 'op@teste.com', password: 'senha-op-123' }, '');
+  assert.equal((await call('GET', '/ads', undefined, login.cookie)).status, 403);
+});

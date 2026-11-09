@@ -193,10 +193,29 @@ export default function LeadSheet({ id, onClose, onChanged }: { id: string; onCl
               <Field label="Veículo de interesse">
                 <Input value={form.veiculo} onChange={(e) => set('veiculo', e.target.value)} placeholder="Ex.: Onix LT 2022" list="opt-veiculos" />
               </Field>
-              <Field label="Criativo / anúncio" hint="De qual anúncio o cliente veio. Em breve, preenchido automaticamente.">
+              <Field label="Criativo / anúncio" hint={l.ad_id ? "Preenchido pelo anúncio. Se editar, vale o que você digitar." : "Preenchido sozinho quando o cliente vem de anúncio."}>
                 <Input value={form.criativo} onChange={(e) => set('criativo', e.target.value)} placeholder="Ex.: Reels Onix Black Friday" list="opt-criativos" />
               </Field>
             </div>
+            {l.ad_id && (
+              <div className="flex items-center gap-3 rounded-xl bg-surface-2 p-2.5 ring-1 ring-separator">
+                {l.ad_image ? (
+                  <img src={l.ad_image} alt="" className="size-14 shrink-0 rounded-lg object-cover" loading="lazy" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                ) : null}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-[12px] font-medium text-label-2">
+                    <Tag tone="accent">Anúncio {l.ad_platform ?? ''}</Tag>
+                    <span className="truncate text-label-3">ID {l.ad_id}</span>
+                  </div>
+                  {l.ad_description && <p className="mt-1 line-clamp-2 text-[13px]" title={l.ad_description}>{l.ad_description}</p>}
+                </div>
+                {l.ad_link && (
+                  <a href={l.ad_link} target="_blank" rel="noreferrer" className="shrink-0 text-accent" title="Ver anúncio" aria-label="Ver anúncio">
+                    <ExternalLink className="size-4" />
+                  </a>
+                )}
+              </div>
+            )}
             <datalist id="opt-veiculos">{facets.data?.veiculos.map((v) => <option key={v} value={v} />)}</datalist>
             <datalist id="opt-criativos">{facets.data?.criativos.map((v) => <option key={v} value={v} />)}</datalist>
           </Section>
