@@ -5,9 +5,10 @@ import { useAsync } from '../lib/hooks.ts';
 import { useLive } from '../lib/live.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { axisLabel, dateShort, money, moneyShort, monthLabel, number, percent, ratio, relative } from '../lib/format.ts';
-import { Button, Card, Change, ErrorNote, PageHeader, Segmented, Select, Skeleton, cx, statusColor, useToast } from '../components/ui.tsx';
+import { Button, Card, Change, ErrorNote, PageHeader, Segmented, Select, Skeleton, cx, useToast } from '../components/ui.tsx';
+import { statusFill, useStatuses } from '../lib/statuses.tsx';
 import { Meter, MiniBars, Ring, TrendChart } from '../components/charts.tsx';
-import { LEAD_STATUSES, STATUS_LABEL, type Analytics, type ChatwootSettings, type Inbox, type Kpi, type Period } from '../../shared/types.ts';
+import { type Analytics, type ChatwootSettings, type Inbox, type Kpi, type Period } from '../../shared/types.ts';
 
 const PERIODS: { value: Period; label: string }[] = [
   { value: 'today', label: 'Hoje' },
@@ -17,15 +18,8 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: 'this_year', label: 'Ano' },
 ];
 
-const STATUS_HEX: Record<string, string> = {
-  NOVO: 'var(--accent)',
-  EM_ANALISE: 'var(--indigo-fill)',
-  PENDENTE: 'var(--orange-fill)',
-  APROVADO: 'var(--green-fill)',
-  REPROVADO: 'var(--red-fill)',
-};
-
 export default function Dashboard() {
+  const { list: statuses } = useStatuses();
   const { user } = useSession();
   const toast = useToast();
   const [period, setPeriod] = useState<Period>('last_30_days');
@@ -142,7 +136,7 @@ export default function Dashboard() {
           {a ? (
             <div className="flex flex-col items-center gap-6 sm:flex-row xl:flex-col 2xl:flex-row">
               <Ring
-                segments={LEAD_STATUSES.map((s) => ({ value: a.status[s], color: STATUS_HEX[s], label: STATUS_LABEL[s] }))}
+                segments={statuses.map((s) => ({ value: a.status[s.key] ?? 0, color: statusFill(s.color), label: s.label }))}
                 center={
                   <>
                     <span className="display text-[30px] font-bold tabular leading-none">{number(a.leads.value)}</span>
@@ -151,13 +145,13 @@ export default function Dashboard() {
                 }
               />
               <ul className="w-full space-y-2.5">
-                {LEAD_STATUSES.map((s) => (
-                  <li key={s} className="flex items-center justify-between text-[14px]">
-                    <span className="flex items-center gap-2 text-label-2">
-                      <i className={cx('size-2.5 rounded-full', statusColor(s).dot)} />
-                      {STATUS_LABEL[s]}
+                {statuses.map((s) => (
+                  <li key={s.key} className="flex items-center justify-between text-[14px]">
+                    <span className="flex min-w-0 items-center gap-2 text-label-2">
+                      <i className="size-2.5 shrink-0 rounded-full" style={{ background: statusFill(s.color) }} />
+                      <span className="truncate">{s.label}</span>
                     </span>
-                    <span className="font-semibold tabular">{number(a.status[s])}</span>
+                    <span className="font-semibold tabular">{number(a.status[s.key] ?? 0)}</span>
                   </li>
                 ))}
               </ul>

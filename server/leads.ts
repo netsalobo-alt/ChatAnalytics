@@ -5,10 +5,10 @@ import { db, nowIso, transaction } from './db.ts';
 import { extractClientData } from '../shared/extractor.ts';
 import type { AdInfo } from '../shared/adParser.ts';
 import { upsertAd } from './ads.ts';
+import { entryStatusKey, getStatus, statusKind } from './statuses.ts';
 import { cleanCPF, formatCPF, validateCPF } from '../shared/cpf.ts';
 import { rangeForPeriod, rangeToIso } from '../shared/dates.ts';
 import {
-  LEAD_STATUSES,
   type Channel,
   type ClientMessage,
   type Lead,
@@ -200,7 +200,7 @@ export function upsertFromChatwoot(input: ChatwootLeadInput): { lead: LeadDetail
       cnh: extracted.cnh,
       cpf_conflict: extracted.cpf_conflict ?? existing?.cpf_conflict ?? null,
       field_origins: extracted.field_origins,
-      status: existing?.status ?? 'NOVO',
+      status: existing?.status ?? entryStatusKey(),
       vendedor: existing?.vendedor ?? null,
       loja: existing?.loja ?? null,
       vendeu: existing?.vendeu ?? false,
@@ -255,7 +255,7 @@ export interface LeadPatch {
 const MANUAL_TRACKED = ['contact_name', 'contact_phone', 'contact_email', 'cpf', 'birth_date', 'cnh', 'criativo'] as const;
 
 export function validatePatch(p: Record<string, unknown>): string | null {
-  if (p.status !== undefined && !LEAD_STATUSES.includes(p.status as LeadStatus)) return 'Status inválido.';
+  if (p.status !== undefined && !getStatus(String(p.status))) return 'Status inválido.';
   if (p.cnh !== undefined && p.cnh !== null && p.cnh !== 'SIM' && p.cnh !== 'NÃO') return 'CNH deve ser SIM ou NÃO.';
   if (p.valor_venda !== undefined && (typeof p.valor_venda !== 'number' || p.valor_venda < 0 || !isFinite(p.valor_venda)))
     return 'Valor de venda inválido.';
@@ -294,12 +294,14 @@ export function updateLead(id: string, patch: LeadPatch): LeadDetail | null {
       next.sale_date = patch.vendeu ? (lead.sale_date ?? nowIso()) : null;
       if (!patch.vendeu && patch.valor_venda === undefined) next.valor_venda = 0;
     }
-    if (patch.status === 'APROVADO' && patch.vendeu === undefined && !lead.vendeu) {
+    // O comportamento vem do tipo do status (ganho/perdido), não do nome.
+    const kind = patch.status ? statusKind(patch.status) : null;
+    if (kind === 'won' && patch.vendeu === undefined && !lead.vendeu) {
       next.vendeu = true;
       next.sale_date = nowIso();
     }
-    if (patch.status && patch.status !== 'REPROVADO' && patch.motivo_reprovacao === undefined) next.motivo_reprovacao = null;
-    if (patch.status === 'REPROVADO' && patch.vendeu === undefined) {
+    if (patch.status && kind !== 'lost' && patch.motivo_reprovacao === undefined) next.motivo_reprovacao = null;
+    if (kind === 'lost' && patch.vendeu === undefined) {
       next.vendeu = false;
       next.sale_date = null;
       next.valor_venda = 0;
@@ -360,7 +362,7 @@ export function createManualLead(input: {
     cpf_valid: false,
     birth_date: null,
     cnh: null,
-    status: 'NOVO',
+    status: entryStatusKey(),
     vendedor: null,
     loja: null,
     vendeu: false,

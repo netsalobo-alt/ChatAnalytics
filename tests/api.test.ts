@@ -284,3 +284,48 @@ test('reprocessar exige Chatwoot configurado e perfil de gestor', async () => {
   const login = await call('POST', '/auth/login', { email: 'op@teste.com', password: 'senha-op-123' }, '');
   assert.equal((await call('GET', '/ads', undefined, login.cookie)).status, 403);
 });
+
+test('status: renomear o de fábrica e criar um novo do tipo ganho que registra venda', async () => {
+  const list = (await call('GET', '/statuses')).data;
+  assert.deepEqual(list.map((s: any) => s.key), ['NOVO', 'EM_ANALISE', 'PENDENTE', 'APROVADO', 'REPROVADO']);
+  const ren = await call('PATCH', '/statuses/APROVADO', { label: 'Contrato assinado', color: 'teal' });
+  assert.equal(ren.data.label, 'Contrato assinado');
+  assert.equal((await call('PATCH', '/statuses/APROVADO', { kind: 'open' })).status, 400, 'tipo de fábrica é fixo');
+  assert.equal((await call('POST', '/statuses', { label: 'contrato ASSINADO', kind: 'won' })).status, 409, 'nome repetido');
+
+  const novo = (await call('POST', '/statuses', { label: 'Venda à vista', kind: 'won', color: 'green' })).data;
+  assert.match(novo.key, /^S_/);
+  await call('POST', `/webhooks/chatwoot/${webhookSecret()}`, {
+    event: 'message_created', id: 880001, content: 'quero comprar', message_type: 'incoming', created_at: new Date().toISOString(),
+    sender: { id: 6001, name: 'Status Custom', type: 'contact' }, conversation: { id: 66001, inbox_id: 3 }, account: { id: 5 },
+  }, '');
+  const r = await call('PATCH', '/leads/5_6001', { status: novo.key, valor_venda: 900 });
+  assert.equal(r.data.lead.vendeu, true);
+  assert.ok(r.data.lead.sale_date);
+  const a = (await call('GET', '/analytics?period=today')).data;
+  assert.ok(a.status[novo.key] >= 1);
+});
+
+test('status: novo do tipo andamento, reordenar e excluir movendo os leads', async () => {
+  const st = (await call('POST', '/statuses', { label: 'Aguardando documentos', kind: 'open', color: 'yellow' })).data;
+  await call('PATCH', '/leads/5_6001', { status: st.key });
+  const lead = (await call('GET', '/leads/5_6001')).data;
+  assert.equal(lead.status, st.key);
+  assert.equal((await call('GET', `/leads?status=${st.key}`)).data.total, 1);
+
+  const order = (await call('PUT', '/statuses/order', { keys: [st.key, 'NOVO'] })).data;
+  assert.equal(order[0].key, st.key);
+  assert.equal(order[0].leads, 1);
+
+  assert.equal((await call('DELETE', '/statuses/NOVO')).status, 400, 'de fábrica não exclui');
+  assert.equal((await call('DELETE', `/statuses/${st.key}`)).status, 400, 'em uso sem destino');
+  const del = await call('DELETE', `/statuses/${st.key}?move_to=PENDENTE`);
+  assert.equal(del.data.moved, 1);
+  assert.equal((await call('GET', '/leads/5_6001')).data.status, 'PENDENTE');
+});
+
+test('status: só administrador altera', async () => {
+  const login = await call('POST', '/auth/login', { email: 'op@teste.com', password: 'senha-op-123' }, '');
+  assert.equal((await call('GET', '/statuses', undefined, login.cookie)).status, 200);
+  assert.equal((await call('POST', '/statuses', { label: 'X', kind: 'open' }, login.cookie)).status, 403);
+});

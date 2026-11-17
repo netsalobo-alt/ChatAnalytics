@@ -27,7 +27,8 @@ import {
 } from './store.ts';
 import { rescheduleAutoSync } from './scheduler.ts';
 import { broadcast, liveStream } from './events.ts';
-import { CHANNELS, LEAD_STATUSES, type AnalyticsFilter, type Channel, type ChatwootSettings, type LeadStatus, type Period, type Role } from '../shared/types.ts';
+import { CHANNELS, type AnalyticsFilter, type Channel, type ChatwootSettings, type Period, type Role, type StatusColor, type StatusKind } from '../shared/types.ts';
+import { createStatus, deleteStatus, getStatus, listStatuses, reorderStatuses, statusKind, statusProblem, updateStatus } from './statuses.ts';
 
 export const api = Router();
 
@@ -171,7 +172,7 @@ function parseLeadQuery(q: Record<string, unknown>): LeadQuery {
   return {
     ...parseFilter(q),
     period: PERIODS.includes(q.period as Period) ? (q.period as Period) : 'all',
-    status: LEAD_STATUSES.includes(q.status as LeadStatus) ? (q.status as LeadStatus) : undefined,
+    status: typeof q.status === 'string' && getStatus(q.status) ? q.status : undefined,
     vendeu: q.vendeu === 'sim' ? true : q.vendeu === 'nao' ? false : undefined,
     conflict: q.conflict === '1',
     cpf: q.cpf === 'com' || q.cpf === 'sem' ? q.cpf : undefined,
@@ -248,8 +249,9 @@ api.patch('/leads/:id', async (req, res) => {
   const lead = updateLead(req.params.id, patch as LeadPatch)!;
 
   let warning: string | undefined;
-  if ((lead.status === 'APROVADO' || lead.status === 'REPROVADO') && lead.status !== before.status) {
-    const { add, remove } = labelsForStatus(lead.status);
+  const kind = statusKind(lead.status);
+  if ((kind === 'won' || kind === 'lost') && lead.status !== before.status) {
+    const { add, remove } = labelsForStatus(kind);
     try {
       await applyLabels(lead, add, remove);
     } catch (err) {
@@ -275,6 +277,48 @@ api.delete('/leads/:id', requireRole('manager'), (req, res) => {
   if (!deleteLead(String(req.params.id))) return fail(res, 404, 'Lead não encontrado.');
   broadcast('lead', { id: String(req.params.id), deleted: true });
   res.json({ ok: true });
+});
+
+// ---------- Status dos leads ----------
+
+api.get('/statuses', (req, res) => res.json(listStatuses(req.query.counts === '1')));
+
+api.post('/statuses', requireRole('admin'), (req, res) => {
+  const problem = statusProblem(req.body ?? {}, true);
+  if (problem) return fail(res, 400, problem);
+  const r = createStatus({ label: req.body.label, color: req.body.color as StatusColor, kind: req.body.kind as StatusKind });
+  if (typeof r === 'string') return fail(res, 409, r);
+  broadcast('statuses');
+  res.status(201).json(r);
+});
+
+api.put('/statuses/order', requireRole('admin'), (req, res) => {
+  if (!Array.isArray(req.body?.keys)) return fail(res, 400, 'Envie a lista de status na nova ordem.');
+  reorderStatuses(req.body.keys.map(String));
+  broadcast('statuses');
+  res.json(listStatuses(true));
+});
+
+api.patch('/statuses/:key', requireRole('admin'), (req, res) => {
+  const problem = statusProblem(req.body ?? {}, false);
+  if (problem) return fail(res, 400, problem);
+  const r = updateStatus(String(req.params.key), {
+    label: req.body.label,
+    color: req.body.color as StatusColor | undefined,
+    kind: req.body.kind as StatusKind | undefined,
+  });
+  if (r === null) return fail(res, 404, 'Status não encontrado.');
+  if (typeof r === 'string') return fail(res, 400, r);
+  broadcast('statuses');
+  res.json(r);
+});
+
+api.delete('/statuses/:key', requireRole('admin'), (req, res) => {
+  const r = deleteStatus(String(req.params.key), str(req.query.move_to));
+  if (typeof r === 'string') return fail(res, 400, r);
+  broadcast('statuses');
+  if (r.moved) broadcast('sync', { statuses: true });
+  res.json(r);
 });
 
 // ---------- Anúncios (criativos) ----------

@@ -7,7 +7,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDownRight, ArrowUpRight, CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
-import { STATUS_LABEL, type LeadStatus } from '../../shared/types.ts';
+import type { LeadStatus } from '../../shared/types.ts';
+import { statusFill, statusPillStyle, useStatuses } from '../lib/statuses.tsx';
 import { initials } from '../lib/format.ts';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
@@ -134,21 +135,13 @@ export function Segmented<T extends string>({
 
 // ---------- Selo de status / variação ----------
 
-const STATUS_STYLE: Record<LeadStatus, { dot: string; text: string; bg: string }> = {
-  NOVO: { dot: 'bg-accent', text: 'text-accent', bg: 'bg-accent-soft' },
-  EM_ANALISE: { dot: 'bg-indigo-fill', text: 'text-indigo', bg: 'bg-indigo-soft' },
-  PENDENTE: { dot: 'bg-orange-fill', text: 'text-orange', bg: 'bg-orange-soft' },
-  APROVADO: { dot: 'bg-green-fill', text: 'text-green', bg: 'bg-green-soft' },
-  REPROVADO: { dot: 'bg-red-fill', text: 'text-red', bg: 'bg-red-soft' },
-};
-export const statusColor = (s: LeadStatus) => STATUS_STYLE[s];
-
 export function StatusPill({ status }: { status: LeadStatus }) {
-  const s = STATUS_STYLE[status];
+  const { get, label } = useStatuses();
+  const def = get(status);
   return (
-    <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-medium', s.bg, s.text)}>
-      <span className={cx('size-1.5 rounded-full', s.dot)} />
-      {STATUS_LABEL[status]}
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-medium" style={statusPillStyle(def?.color)}>
+      <span className="size-1.5 rounded-full" style={{ background: statusFill(def?.color) }} />
+      {label(status)}
     </span>
   );
 }

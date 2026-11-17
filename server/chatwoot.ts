@@ -237,11 +237,11 @@ export async function applyLabels(lead: Lead, add: string[], remove: string[] = 
   await api(s, `/conversations/${lead.conversation_id}/labels`, { method: 'POST', body: JSON.stringify({ labels: next }) });
 }
 
-export function labelsForStatus(status: 'APROVADO' | 'REPROVADO') {
+export function labelsForStatus(kind: 'won' | 'lost') {
   const s = getSettings();
   const approve = parseLabels(s.labels_on_approve);
   const reject = parseLabels(s.labels_on_reject);
-  return status === 'APROVADO' ? { add: approve, remove: reject } : { add: reject, remove: approve };
+  return kind === 'won' ? { add: approve, remove: reject } : { add: reject, remove: approve };
 }
 
 // ---------- Webhook ----------

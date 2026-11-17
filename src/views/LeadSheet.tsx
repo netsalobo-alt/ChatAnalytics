@@ -5,7 +5,8 @@ import { useAsync } from '../lib/hooks.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { dateTime, money, phone, relative } from '../lib/format.ts';
 import { Avatar, Button, Dialog, ErrorNote, Field, Input, Select, Sheet, Skeleton, StatusPill, Tag, Textarea, Toggle, useToast, cx } from '../components/ui.tsx';
-import { LEAD_STATUSES, STATUS_LABEL, type LeadDetail, type LeadStatus } from '../../shared/types.ts';
+import type { LeadDetail, LeadStatus, StatusDef } from '../../shared/types.ts';
+import { statusFill, statusPillStyle, useStatuses } from '../lib/statuses.tsx';
 
 type Form = {
   contact_name: string;
@@ -56,7 +57,8 @@ export default function LeadSheet({ id, onClose, onChanged }: { id: string; onCl
   const [form, setForm] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [ask, setAsk] = useState<'approve' | 'reject' | 'delete' | null>(null);
+  const statuses = useStatuses();
+  const [ask, setAsk] = useState<'delete' | StatusDef | null>(null);
 
   useEffect(() => {
     if (lead.data) setForm(toForm(lead.data));
@@ -163,11 +165,19 @@ export default function LeadSheet({ id, onClose, onChanged }: { id: string; onCl
           </div>
 
           {/* Ações rápidas */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <QuickAction tone="green" active={l.status === 'APROVADO'} onClick={() => setAsk('approve')} disabled={saving}><Check className="size-4" />Aprovar</QuickAction>
-            <QuickAction tone="red" active={l.status === 'REPROVADO'} onClick={() => setAsk('reject')} disabled={saving}><X className="size-4" />Reprovar</QuickAction>
-            <QuickAction tone="indigo" active={l.status === 'EM_ANALISE'} onClick={() => patch({ status: 'EM_ANALISE' }, 'Lead em análise.')} disabled={saving}>Em análise</QuickAction>
-            <QuickAction tone="orange" active={l.status === 'PENDENTE'} onClick={() => patch({ status: 'PENDENTE' }, 'Lead pendente.')} disabled={saving}>Pendente</QuickAction>
+          <div className="flex flex-wrap gap-2">
+            {statuses.list.map((st) => (
+              <QuickAction
+                key={st.key}
+                status={st}
+                active={l.status === st.key}
+                disabled={saving}
+                onClick={() => {
+                  if (st.kind === 'won' || st.kind === 'lost') setAsk(st);
+                  else patch({ status: st.key }, `${l.contact_name}: ${st.label}.`);
+                }}
+              />
+            ))}
           </div>
 
           {l.cpf_conflict && (
@@ -240,13 +250,14 @@ export default function LeadSheet({ id, onClose, onChanged }: { id: string; onCl
               </Field>
               <Field label="Status">
                 <Select value={form.status} onChange={(e) => set('status', e.target.value as LeadStatus)}>
-                  {LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                  {!statuses.get(form.status) && <option value={form.status}>Status removido</option>}
+                  {statuses.list.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </Select>
               </Field>
               <Field label="Vendedor"><Input value={form.vendedor} onChange={(e) => set('vendedor', e.target.value)} /></Field>
               <Field label="Loja"><Input value={form.loja} onChange={(e) => set('loja', e.target.value)} /></Field>
             </div>
-            {form.status === 'REPROVADO' && (
+            {statuses.get(form.status)?.kind === 'lost' && (
               <Field label="Motivo da reprovação"><Input value={form.motivo_reprovacao} onChange={(e) => set('motivo_reprovacao', e.target.value)} /></Field>
             )}
           </Section>
@@ -280,8 +291,12 @@ export default function LeadSheet({ id, onClose, onChanged }: { id: string; onCl
         </div>
       )}
 
-      {ask === 'approve' && l && <ApproveDialog lead={l} onClose={() => setAsk(null)} onConfirm={(valor) => { setAsk(null); patch({ status: 'APROVADO', vendeu: true, valor_venda: valor }, 'Lead aprovado e venda registrada.'); }} />}
-      {ask === 'reject' && l && <RejectDialog onClose={() => setAsk(null)} onConfirm={(motivo) => { setAsk(null); patch({ status: 'REPROVADO', motivo_reprovacao: motivo }, 'Lead reprovado.'); }} />}
+      {ask && ask !== 'delete' && ask.kind === 'won' && l && (
+        <ApproveDialog title={ask.label} lead={l} onClose={() => setAsk(null)} onConfirm={(valor) => { const st = ask; setAsk(null); patch({ status: st.key, vendeu: true, valor_venda: valor }, `${st.label}: venda registrada.`); }} />
+      )}
+      {ask && ask !== 'delete' && ask.kind === 'lost' && l && (
+        <RejectDialog title={ask.label} onClose={() => setAsk(null)} onConfirm={(motivo) => { const st = ask; setAsk(null); patch({ status: st.key, motivo_reprovacao: motivo }, `${l.contact_name}: ${st.label}.`); }} />
+      )}
       {ask === 'delete' && (
         <Dialog title="Excluir lead?" onClose={() => setAsk(null)} footer={<><Button onClick={() => setAsk(null)}>Cancelar</Button><Button variant="destructive" onClick={remove}>Excluir</Button></>}>
           <p className="text-[15px] text-label-2">O lead sai dos relatórios. Se o cliente mandar nova mensagem no Chatwoot, ele volta como lead novo.</p>
@@ -303,35 +318,40 @@ function Section({ title, action, children }: { title: string; action?: React.Re
   );
 }
 
-function QuickAction({ tone, active, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone: 'green' | 'red' | 'indigo' | 'orange'; active: boolean }) {
-  const tones = {
-    green: active ? 'bg-green-fill text-white' : 'text-green',
-    red: active ? 'bg-red-fill text-white' : 'text-red',
-    indigo: active ? 'bg-indigo-fill text-white' : 'text-indigo',
-    orange: active ? 'bg-orange-fill text-white' : 'text-orange',
-  };
+function QuickAction({ status, active, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { status: StatusDef; active: boolean }) {
+  const pill = statusPillStyle(status.color);
+  const Icon = status.kind === 'won' ? Check : status.kind === 'lost' ? X : null;
   return (
-    <button {...rest} className={cx('inline-flex h-10 items-center justify-center gap-1.5 rounded-xl text-[14px] font-semibold shadow-card transition disabled:opacity-50', active ? '' : 'bg-surface hover:bg-surface-2', tones[tone])}>
-      {children}
+    <button
+      {...rest}
+      aria-pressed={active}
+      className={cx(
+        'inline-flex h-10 flex-1 basis-[calc(50%-4px)] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-[14px] font-semibold shadow-card transition disabled:opacity-50 sm:basis-auto',
+        !active && 'bg-surface hover:bg-surface-2',
+      )}
+      style={active ? { background: statusFill(status.color), color: '#fff' } : { color: pill.color }}
+    >
+      {Icon && <Icon className="size-4" />}
+      {status.label}
     </button>
   );
 }
 
-export function ApproveDialog({ lead, onClose, onConfirm }: { lead: { valor_venda: number }; onClose: () => void; onConfirm: (valor: number) => void }) {
+export function ApproveDialog({ lead, title = 'Aprovar', onClose, onConfirm }: { lead: { valor_venda: number }; title?: string; onClose: () => void; onConfirm: (valor: number) => void }) {
   const [valor, setValor] = useState(lead.valor_venda ? String(lead.valor_venda).replace('.', ',') : '');
   return (
-    <Dialog title="Aprovar lead" onClose={onClose} footer={<><Button onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={() => onConfirm(parseMoney(valor))}>Aprovar</Button></>}>
-      <p className="mb-4 text-[15px] text-label-2">A aprovação registra a venda e aplica as etiquetas configuradas na conversa do Chatwoot.</p>
+    <Dialog title={title} onClose={onClose} footer={<><Button onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={() => onConfirm(parseMoney(valor))}>Confirmar venda</Button></>}>
+      <p className="mb-4 text-[15px] text-label-2">Este status registra a venda e aplica as etiquetas configuradas na conversa do Chatwoot.</p>
       <Field label="Valor da venda (R$)"><Input value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0,00" inputMode="decimal" autoFocus /></Field>
     </Dialog>
   );
 }
 
-export function RejectDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: (motivo: string) => void }) {
+export function RejectDialog({ title = 'Reprovar', onClose, onConfirm }: { title?: string; onClose: () => void; onConfirm: (motivo: string) => void }) {
   const [motivo, setMotivo] = useState('');
   const reasons = ['Score baixo', 'Sem entrada', 'Documentação incompleta', 'Desistiu', 'Sem contato'];
   return (
-    <Dialog title="Reprovar lead" onClose={onClose} footer={<><Button onClick={onClose}>Cancelar</Button><Button variant="destructive" onClick={() => onConfirm(motivo.trim() || 'Não informado')}>Reprovar</Button></>}>
+    <Dialog title={title} onClose={onClose} footer={<><Button onClick={onClose}>Cancelar</Button><Button variant="destructive" onClick={() => onConfirm(motivo.trim() || 'Não informado')}>Confirmar</Button></>}>
       <div className="mb-3 flex flex-wrap gap-1.5">
         {reasons.map((r) => (
           <button key={r} onClick={() => setMotivo(r)} className={cx('rounded-full px-3 py-1 text-[13px] font-medium', motivo === r ? 'bg-label text-bg' : 'bg-fill text-label-2')}>{r}</button>

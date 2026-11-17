@@ -5,17 +5,19 @@ import { useAsync, useDebounced } from '../lib/hooks.ts';
 import { useLive } from '../lib/live.ts';
 import { can, useSession } from '../lib/session.tsx';
 import { money, number, phone, relative } from '../lib/format.ts';
-import { Avatar, Button, Card, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Select, Skeleton, Tag, useToast, cx, statusColor } from '../components/ui.tsx';
+import { Avatar, Button, Card, Dialog, Empty, ErrorNote, Field, Input, PageHeader, Select, Skeleton, Tag, useToast, cx } from '../components/ui.tsx';
+import { statusFill, statusPillStyle, useStatuses } from '../lib/statuses.tsx';
 import { ChevronDown } from 'lucide-react';
 import LeadSheet, { ApproveDialog, RejectDialog } from './LeadSheet.tsx';
-import { CHANNELS, LEAD_STATUSES, PERIOD_LABEL, STATUS_LABEL, type Channel, type Inbox, type Lead, type LeadStatus, type Paged, type Period } from '../../shared/types.ts';
+import { CHANNELS, PERIOD_LABEL, type StatusDef, type Channel, type Inbox, type Lead, type LeadStatus, type Paged, type Period } from '../../shared/types.ts';
 
 const PERIOD_OPTIONS: Period[] = ['all', 'today', 'yesterday', 'last_7_days', 'last_30_days', 'this_month', 'last_month', 'this_year'];
 
 export default function Leads() {
   const { user } = useSession();
   const toast = useToast();
-  const [ask, setAsk] = useState<{ lead: Lead; status: 'APROVADO' | 'REPROVADO' } | null>(null);
+  const statuses = useStatuses();
+  const [ask, setAsk] = useState<{ lead: Lead; status: StatusDef } | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<LeadStatus | ''>('');
   const [period, setPeriod] = useState<Period>('all');
@@ -45,7 +47,7 @@ export default function Leads() {
     try {
       const r = await api.patch<{ lead: Lead; warning?: string }>(`/leads/${encodeURIComponent(lead.id)}`, body);
       leads.setData((d) => (d ? { ...d, items: d.items.map((x) => (x.id === lead.id ? r.lead : x)) } : d));
-      toast(r.warning ? 'error' : 'success', r.warning ?? `${lead.contact_name}: ${STATUS_LABEL[status]}.`);
+      toast(r.warning ? 'error' : 'success', r.warning ?? `${lead.contact_name}: ${statuses.label(status)}.`);
     } catch (err) {
       toast('error', (err as Error).message);
       leads.reload();
@@ -85,8 +87,11 @@ export default function Leads() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Chip active={!status} onClick={() => resetPage(setStatus)('')}>Todos</Chip>
-          {LEAD_STATUSES.map((s) => (
-            <Chip key={s} active={status === s} onClick={() => resetPage(setStatus)(status === s ? '' : s)}>{STATUS_LABEL[s]}</Chip>
+          {statuses.list.map((s) => (
+            <Chip key={s.key} active={status === s.key} onClick={() => resetPage(setStatus)(status === s.key ? '' : s.key)}>
+              <i className="size-2 rounded-full" style={{ background: statusFill(s.color) }} />
+              {s.label}
+            </Chip>
           ))}
           <Chip active={conflict} onClick={() => resetPage(setConflict)(!conflict)}>
             <AlertTriangle className="size-3.5" /> Conflito de CPF
@@ -155,9 +160,10 @@ export default function Leads() {
                     <td className="px-3">
                       <StatusSelect
                         value={l.status}
-                        onChange={(status) => {
-                          if (status === 'APROVADO' || status === 'REPROVADO') setAsk({ lead: l, status });
-                          else changeStatus(l, { status });
+                        onChange={(key) => {
+                          const def = statuses.get(key);
+                          if (def && (def.kind === 'won' || def.kind === 'lost')) setAsk({ lead: l, status: def });
+                          else changeStatus(l, { status: key });
                         }}
                       />
                     </td>
@@ -201,21 +207,23 @@ export default function Leads() {
       </Card>
 
       {openId && <LeadSheet id={openId} onClose={() => setOpenId(null)} onChanged={leads.reload} />}
-      {ask?.status === 'APROVADO' && (
+      {ask?.status.kind === 'won' && (
         <ApproveDialog
+          title={ask.status.label}
           lead={ask.lead}
           onClose={() => setAsk(null)}
           onConfirm={(valor) => {
-            changeStatus(ask.lead, { status: 'APROVADO', vendeu: true, valor_venda: valor });
+            changeStatus(ask.lead, { status: ask.status.key, vendeu: true, valor_venda: valor });
             setAsk(null);
           }}
         />
       )}
-      {ask?.status === 'REPROVADO' && (
+      {ask?.status.kind === 'lost' && (
         <RejectDialog
+          title={ask.status.label}
           onClose={() => setAsk(null)}
           onConfirm={(motivo) => {
-            changeStatus(ask.lead, { status: 'REPROVADO', motivo_reprovacao: motivo });
+            changeStatus(ask.lead, { status: ask.status.key, motivo_reprovacao: motivo });
             setAsk(null);
           }}
         />
@@ -304,19 +312,23 @@ function NewLeadDialog({ inboxes, onClose, onCreated }: { inboxes: Inbox[]; onCl
 
 /** Status editável direto na lista: um seletor com a aparência do selo de status. */
 function StatusSelect({ value, onChange }: { value: LeadStatus; onChange: (s: LeadStatus) => void }) {
-  const c = statusColor(value);
+  const { list, get } = useStatuses();
+  const def = get(value);
+  const pill = statusPillStyle(def?.color);
   return (
-    <span className={cx('relative inline-flex items-center rounded-full', c.bg)} onClick={(e) => e.stopPropagation()}>
-      <span className={cx('pointer-events-none absolute left-2.5 size-1.5 rounded-full', c.dot)} />
+    <span className="relative inline-flex max-w-[170px] items-center rounded-full" style={{ background: pill.background }} onClick={(e) => e.stopPropagation()}>
+      <span className="pointer-events-none absolute left-2.5 size-1.5 rounded-full" style={{ background: statusFill(def?.color) }} />
       <select
         value={value}
-        onChange={(e) => onChange(e.target.value as LeadStatus)}
+        onChange={(e) => onChange(e.target.value)}
         aria-label="Alterar status"
-        className={cx('cursor-pointer appearance-none rounded-full bg-transparent py-1 pl-6 pr-7 text-[12px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent', c.text)}
+        className="w-full cursor-pointer appearance-none truncate rounded-full bg-transparent py-1 pl-6 pr-7 text-[12px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        style={{ color: pill.color }}
       >
-        {LEAD_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+        {!def && <option value={value}>Status removido</option>}
+        {list.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
       </select>
-      <ChevronDown className={cx('pointer-events-none absolute right-2 size-3.5', c.text)} />
+      <ChevronDown className="pointer-events-none absolute right-2 size-3.5" style={{ color: pill.color }} />
     </span>
   );
 }

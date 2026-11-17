@@ -2,7 +2,7 @@
 
 import type { Request, Response } from 'express';
 
-export type LiveEvent = 'lead' | 'sync' | 'webhook' | 'backfill';
+export type LiveEvent = 'lead' | 'sync' | 'webhook' | 'backfill' | 'statuses';
 
 const clients = new Set<Response>();
 

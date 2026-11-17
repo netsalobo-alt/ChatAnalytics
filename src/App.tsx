@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
-import { BarChart3, Cable, FileText, LogOut, Megaphone, Rows3, Sparkles, Users, Waypoints } from 'lucide-react';
+import { BarChart3, Cable, FileText, LogOut, Megaphone, Rows3, Settings as SettingsIcon, Sparkles, Users, Waypoints } from 'lucide-react';
 import { api, setUnauthorizedHandler } from './lib/api.ts';
 import { useHashRoute } from './lib/hooks.ts';
 import { closeLive, useLiveStatus } from './lib/live.ts';
@@ -15,6 +15,8 @@ import UsersView from './views/Users.tsx';
 import Integration from './views/Integration.tsx';
 import Reports from './views/Reports.tsx';
 import Creatives from './views/Creatives.tsx';
+import Settings from './views/Settings.tsx';
+import { StatusesProvider } from './lib/statuses.tsx';
 
 interface NavItem {
   id: string;
@@ -33,7 +35,8 @@ const NAV: NavItem[] = [
   { id: 'investimentos', label: 'Investimentos', short: 'Invest.', icon: Megaphone, min: 'manager', view: Investments },
   { id: 'relatorios', label: 'Relatórios', short: 'Relatór.', icon: FileText, min: 'manager', view: Reports },
   { id: 'usuarios', label: 'Usuários', icon: Users, min: 'admin', view: UsersView },
-  { id: 'integracao', label: 'Integração', short: 'Ajustes', icon: Cable, min: 'manager', view: Integration },
+  { id: 'integracao', label: 'Integração', short: 'Integr.', icon: Cable, min: 'manager', view: Integration },
+  { id: 'configuracoes', label: 'Configurações', short: 'Ajustes', icon: SettingsIcon, min: 'admin', view: Settings },
 ];
 
 export default function App() {
@@ -82,7 +85,9 @@ export default function App() {
   }
   return (
     <SessionCtx.Provider value={session}>
-      <Shell />
+      <StatusesProvider>
+        <Shell />
+      </StatusesProvider>
     </SessionCtx.Provider>
   );
 }

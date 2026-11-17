@@ -127,6 +127,22 @@ const MIGRATIONS: string[] = [
     last_seen TEXT NOT NULL
   );
   `,
+  `
+  CREATE TABLE lead_statuses (
+    key TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT 'gray',
+    kind TEXT NOT NULL CHECK (kind IN ('new','open','won','lost')),
+    position INTEGER NOT NULL DEFAULT 0,
+    system INTEGER NOT NULL DEFAULT 0
+  );
+  INSERT INTO lead_statuses (key, label, color, kind, position, system) VALUES
+    ('NOVO', 'Novo', 'blue', 'new', 0, 1),
+    ('EM_ANALISE', 'Em análise', 'indigo', 'open', 1, 1),
+    ('PENDENTE', 'Pendente', 'orange', 'open', 2, 1),
+    ('APROVADO', 'Aprovado', 'green', 'won', 3, 1),
+    ('REPROVADO', 'Reprovado', 'red', 'lost', 4, 1);
+  `,
 ];
 
 function migrate() {

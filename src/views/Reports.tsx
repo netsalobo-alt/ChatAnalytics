@@ -4,9 +4,10 @@ import { api, qs } from '../lib/api.ts';
 import { dayKey } from '../../shared/dates.ts';
 import { useAsync } from '../lib/hooks.ts';
 import { dateShort, dateTime, money, monthLabel, number, percent, ratio } from '../lib/format.ts';
-import { Button, Card, ErrorNote, Input, PageHeader, Segmented, Select, Skeleton, cx, statusColor } from '../components/ui.tsx';
+import { Button, Card, ErrorNote, Input, PageHeader, Segmented, Select, Skeleton, cx } from '../components/ui.tsx';
+import { statusFill, useStatuses } from '../lib/statuses.tsx';
 import { Meter } from '../components/charts.tsx';
-import { LEAD_STATUSES, STATUS_LABEL, type Inbox, type Period, type Report, type ReportGroup } from '../../shared/types.ts';
+import { type Inbox, type Period, type Report, type ReportGroup } from '../../shared/types.ts';
 
 const PERIODS: { value: Period; label: string }[] = [
   { value: 'this_month', label: 'Este mês' },
@@ -19,6 +20,7 @@ const PERIODS: { value: Period; label: string }[] = [
 const today = () => dayKey();
 
 export default function Reports() {
+  const { list: statuses } = useStatuses();
   const [period, setPeriod] = useState<Period>('this_month');
   const [start, setStart] = useState(today().slice(0, 8) + '01');
   const [end, setEnd] = useState(today());
@@ -100,15 +102,15 @@ export default function Reports() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card title="Funil de qualificação">
               <div className="space-y-3">
-                {LEAD_STATUSES.map((s) => {
-                  const n = a.status[s];
+                {statuses.map((st) => {
+                  const n = a.status[st.key] ?? 0;
                   return (
-                    <div key={s}>
+                    <div key={st.key}>
                       <div className="mb-1 flex justify-between text-[14px]">
-                        <span className="flex items-center gap-2"><i className={cx('size-2.5 rounded-full', statusColor(s).dot)} />{STATUS_LABEL[s]}</span>
+                        <span className="flex items-center gap-2"><i className="size-2.5 rounded-full" style={{ background: statusFill(st.color) }} />{st.label}</span>
                         <span className="tabular"><b>{number(n)}</b> <span className="text-label-3">· {percent(a.leads.value ? (n / a.leads.value) * 100 : 0, 0)}</span></span>
                       </div>
-                      <Meter value={n} max={Math.max(1, a.leads.value)} color={`var(--${({ NOVO: 'accent', EM_ANALISE: 'indigo-fill', PENDENTE: 'orange-fill', APROVADO: 'green-fill', REPROVADO: 'red-fill' } as const)[s]})`} />
+                      <Meter value={n} max={Math.max(1, a.leads.value)} color={statusFill(st.color)} />
                     </div>
                   );
                 })}

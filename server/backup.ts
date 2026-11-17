@@ -5,7 +5,8 @@ import { getLead, writeRow } from './leads.ts';
 import { getSettings, setSettings, type SettingsShape } from './settings.ts';
 import { listInboxes, listInvestments } from './store.ts';
 import { cleanCPF, formatCPF, validateCPF } from '../shared/cpf.ts';
-import { CHANNELS, LEAD_STATUSES, type Channel, type ClientMessage, type Inbox, type Investment, type LeadDetail, type LeadStatus } from '../shared/types.ts';
+import { getStatus, entryStatusKey } from './statuses.ts';
+import { CHANNELS, STATUS_COLORS, type Channel, type ClientMessage, type Inbox, type Investment, type LeadDetail, type LeadStatus } from '../shared/types.ts';
 
 type Json = Record<string, any>;
 
@@ -18,6 +19,7 @@ export interface BackupV3 {
   leads: LeadDetail[];
   investments: Investment[];
   ads?: Json[];
+  statuses?: Json[];
 }
 
 export function exportBackup(): BackupV3 {
@@ -32,6 +34,7 @@ export function exportBackup(): BackupV3 {
     leads: ids.map((id) => getLead(id)!).filter(Boolean),
     investments: listInvestments(),
     ads: db.prepare('SELECT * FROM ads').all() as Json[],
+    statuses: db.prepare('SELECT * FROM lead_statuses ORDER BY position').all() as Json[],
   };
 }
 
@@ -65,9 +68,9 @@ function birth(v: unknown): string | null {
 function normalizeLead(raw: Json): LeadDetail | null {
   if (!raw || typeof raw !== 'object' || !raw.id) return null;
   const now = nowIso();
-  const status: LeadStatus = LEAD_STATUSES.includes(raw.status)
+  const status: LeadStatus = typeof raw.status === 'string' && getStatus(raw.status)
     ? raw.status
-    : LEGACY_STATUS[raw.status] ?? (raw.is_converted ? 'APROVADO' : 'NOVO');
+    : LEGACY_STATUS[raw.status] ?? (raw.is_converted ? 'APROVADO' : entryStatusKey());
   const vendeu = Boolean(raw.vendeu ?? raw.is_converted ?? false);
   const cpfClean = cleanCPF(raw.cpf);
   const entry = iso(raw.entry_date ?? raw.first_identified_at ?? raw.created_at, now);
@@ -159,6 +162,23 @@ export function importBackup(data: Json, mode: 'merge' | 'replace'): ImportResul
        ON CONFLICT(id) DO UPDATE SET name = COALESCE(excluded.name, name),
          description = COALESCE(excluded.description, description), image_url = COALESCE(excluded.image_url, image_url)`,
     );
+    // Status personalizados primeiro, para os leads poderem usá-los.
+    const stStmt = db.prepare(
+      `INSERT INTO lead_statuses (key, label, color, kind, position, system) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET label = excluded.label, color = excluded.color, position = excluded.position`,
+    );
+    for (const st of isV3 && Array.isArray(data.statuses) ? data.statuses : []) {
+      const kind = ['new', 'open', 'won', 'lost'].includes(st?.kind) ? st.kind : null;
+      if (!str(st?.key) || !str(st?.label) || !kind) continue;
+      const color = (STATUS_COLORS as readonly string[]).includes(st.color) ? st.color : 'gray';
+      const existing = getStatus(String(st.key));
+      try {
+        stStmt.run(String(st.key), String(st.label), color, existing?.kind ?? kind, Number(st.position) || 0, existing?.system ? 1 : 0);
+      } catch {
+        /* nome repetido: mantém o atual */
+      }
+    }
+
     for (const a of isV3 && Array.isArray(data.ads) ? data.ads : []) {
       if (!str(a?.id)) continue;
       adStmt.run(String(a.id), str(a.platform), str(a.title), str(a.description), str(a.link), str(a.image_url), str(a.name),

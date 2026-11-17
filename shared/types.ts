@@ -18,16 +18,43 @@ export interface User {
   last_login_at: string | null;
 }
 
+/** Chaves dos status que vêm de fábrica. Novos status recebem chaves geradas. */
 export const LEAD_STATUSES = ['NOVO', 'EM_ANALISE', 'PENDENTE', 'APROVADO', 'REPROVADO'] as const;
-export type LeadStatus = (typeof LEAD_STATUSES)[number];
+export type LeadStatus = string;
 
-export const STATUS_LABEL: Record<LeadStatus, string> = {
-  NOVO: 'Novo',
-  EM_ANALISE: 'Em análise',
-  PENDENTE: 'Pendente',
-  APROVADO: 'Aprovado',
-  REPROVADO: 'Reprovado',
+/**
+ * Tipo do status — define o comportamento, independente do nome:
+ * new = entrada do lead; open = em andamento; won = ganho (registra venda); lost = perdido (pede motivo).
+ */
+export type StatusKind = 'new' | 'open' | 'won' | 'lost';
+
+export const STATUS_KIND_LABEL: Record<StatusKind, string> = {
+  new: 'Entrada',
+  open: 'Em andamento',
+  won: 'Ganho (venda)',
+  lost: 'Perdido',
 };
+
+export const STATUS_COLORS = ['blue', 'indigo', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'teal', 'gray'] as const;
+export type StatusColor = (typeof STATUS_COLORS)[number];
+
+export interface StatusDef {
+  key: string;
+  label: string;
+  color: StatusColor;
+  kind: StatusKind;
+  position: number;
+  system: boolean; // status de fábrica: pode renomear e trocar a cor, não pode excluir
+  leads?: number; // quantos leads estão neste status
+}
+
+export const DEFAULT_STATUSES: StatusDef[] = [
+  { key: 'NOVO', label: 'Novo', color: 'blue', kind: 'new', position: 0, system: true },
+  { key: 'EM_ANALISE', label: 'Em análise', color: 'indigo', kind: 'open', position: 1, system: true },
+  { key: 'PENDENTE', label: 'Pendente', color: 'orange', kind: 'open', position: 2, system: true },
+  { key: 'APROVADO', label: 'Aprovado', color: 'green', kind: 'won', position: 3, system: true },
+  { key: 'REPROVADO', label: 'Reprovado', color: 'red', kind: 'lost', position: 4, system: true },
+];
 
 export const CHANNELS = ['WhatsApp', 'Instagram', 'Facebook', 'Webchat', 'Outros'] as const;
 export type Channel = (typeof CHANNELS)[number];
@@ -207,7 +234,7 @@ export interface Analytics {
   cac: number;
   roas: number;
   ticket: number;
-  status: Record<LeadStatus, number>;
+  status: Record<string, number>;
   series: SeriesPoint[];
   series_bucket: 'day' | 'month';
   channels: ChannelRow[];

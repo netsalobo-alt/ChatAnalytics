@@ -31,7 +31,7 @@ export function computeReport(f: AnalyticsFilter): Report {
   const rejections = db
     .prepare(
       `SELECT COALESCE(NULLIF(TRIM(motivo_reprovacao), ''), 'Não informado') AS reason, COUNT(*) AS count
-       FROM leads WHERE ${sql} AND status = 'REPROVADO' GROUP BY 1 ORDER BY count DESC`,
+       FROM leads WHERE ${sql} AND status IN (SELECT key FROM lead_statuses WHERE kind = 'lost') GROUP BY 1 ORDER BY count DESC`,
     )
     .all(...params) as { reason: string; count: number }[];
 

@@ -3,6 +3,7 @@
 import { db } from './db.ts';
 import { addDays, dayKey, daysBetween, previousRange, rangeForPeriod, rangeToIso, type DayRange } from '../shared/dates.ts';
 import { investedBetween, investedByMonth, listInboxes, inboxLabel } from './store.ts';
+import { listStatuses } from './statuses.ts';
 import type { Analytics, AnalyticsFilter, Channel, ChannelRow, Kpi, LeadStatus, MonthRow, SeriesPoint } from '../shared/types.ts';
 
 interface LeadLite {
@@ -65,8 +66,9 @@ interface Totals {
 function totals(f: AnalyticsFilter, r: DayRange): Totals & { entered: LeadLite[]; closed: LeadLite[] } {
   const entered = leadsEntered(f, r);
   const closed = salesClosed(f, r);
-  const approved = entered.filter((l) => l.status === 'APROVADO').length;
-  const rejected = entered.filter((l) => l.status === 'REPROVADO').length;
+  const kinds = new Map(listStatuses().map((s) => [s.key, s.kind]));
+  const approved = entered.filter((l) => kinds.get(l.status) === 'won').length;
+  const rejected = entered.filter((l) => kinds.get(l.status) === 'lost').length;
   return {
     entered,
     closed,
@@ -166,7 +168,7 @@ export function computeAnalytics(f: AnalyticsFilter): Analytics {
     });
   }
 
-  const status = { NOVO: 0, EM_ANALISE: 0, PENDENTE: 0, APROVADO: 0, REPROVADO: 0 } as Record<LeadStatus, number>;
+  const status: Record<string, number> = Object.fromEntries(listStatuses().map((s) => [s.key, 0]));
   for (const l of cur.entered) status[l.status] = (status[l.status] ?? 0) + 1;
 
   const todayTotals = range.start === today && range.end === today ? cur : totals(f, { start: today, end: today });

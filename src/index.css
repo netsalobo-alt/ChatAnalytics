@@ -31,6 +31,17 @@
   --teal-fill: #30b0c7;
   --sidebar: rgba(246, 246, 248, 0.72);
   --toggle-off: #e5e5ea;
+  /* Cores dos status (cheia e texto) */
+  --st-blue: #0071e3; --st-blue-text: #0060c0;
+  --st-indigo: #5856d6; --st-indigo-text: #3634a3;
+  --st-purple: #af52de; --st-purple-text: #8944ab;
+  --st-pink: #ff2d55; --st-pink-text: #c4123f;
+  --st-red: #ff3b30; --st-red-text: #d70015;
+  --st-orange: #ff9500; --st-orange-text: #c93400;
+  --st-yellow: #ffcc00; --st-yellow-text: #8f6a00;
+  --st-green: #34c759; --st-green-text: #248a3d;
+  --st-teal: #30b0c7; --st-teal-text: #0071a4;
+  --st-gray: #8e8e93; --st-gray-text: #636366;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
   --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
   color-scheme: light;
@@ -67,6 +78,16 @@
     --teal-fill: #40c8e0;
     --sidebar: rgba(28, 28, 30, 0.72);
     --toggle-off: #39393d;
+    --st-blue: #0a84ff; --st-blue-text: #409cff;
+    --st-indigo: #5e5ce6; --st-indigo-text: #7d7aff;
+    --st-purple: #bf5af2; --st-purple-text: #da8fff;
+    --st-pink: #ff375f; --st-pink-text: #ff6482;
+    --st-red: #ff453a; --st-red-text: #ff6961;
+    --st-orange: #ff9f0a; --st-orange-text: #ffb340;
+    --st-yellow: #ffd60a; --st-yellow-text: #ffd426;
+    --st-green: #30d158; --st-green-text: #30db5b;
+    --st-teal: #40c8e0; --st-teal-text: #5de6ff;
+    --st-gray: #98989d; --st-gray-text: #aeaeb2;
     --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.04);
     --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
     color-scheme: dark;
